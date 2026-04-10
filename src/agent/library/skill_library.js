@@ -8,7 +8,7 @@ export class SkillLibrary {
         this.embedding_model = embedding_model;
         this.skill_docs_embeddings = {};
         this.skill_docs = null;
-        this.always_show_skills = ['skills.placeBlock', 'skills.wait', 'skills.breakBlockAt']
+        this.always_show_skills = ['skills.placeBlock', 'skills.wait', 'skills.breakBlockAt'];
     }
     async initSkillLibrary() {
         const skillDocs = getSkillDocs();
@@ -33,11 +33,12 @@ export class SkillLibrary {
         }
     }
 
-    async getAllSkillDocs() {
+    getAllSkillDocs() {
         return this.skill_docs;
     }
 
-    async getRelevantSkillDocs(message, select_num) {
+    async getRelevantSkillDocs(message, select_num, options = {}) {
+        const { compact = false } = options;
         if(!message) // use filler message if none is provided
             message = '(no message)';
         let skill_doc_similarities = [];
@@ -82,12 +83,39 @@ export class SkillLibrary {
         });
         
         let relevant_skill_docs = '#### RELEVANT CODE DOCS ###\nThe following functions are available to use:\n';
-        relevant_skill_docs += Array.from(selected_docs).join('\n### ');
+        relevant_skill_docs += Array
+            .from(selected_docs)
+            .map(doc => compact ? this._summarizeSkillDoc(doc) : doc)
+            .join('\n### ');
 
         console.log('Selected skill docs:', Array.from(selected_docs).map(doc => {
             const first_line_break = doc.indexOf('\n');
             return first_line_break > 0 ? doc.substring(0, first_line_break) : doc;
         }));
         return relevant_skill_docs;
+    }
+
+    _summarizeSkillDoc(doc) {
+        const lines = doc
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
+
+        const name = lines[0] || 'unknown';
+        const description = lines.find(line => line.startsWith('*') && !line.startsWith('* @'))
+            ?.replace(/^\*\s*/, '');
+        const params = lines
+            .filter(line => line.startsWith('* @param'))
+            .map(line => line.match(/^\*\s*@param\s+\{[^}]+\}\s+([^,\s]+)/)?.[1])
+            .filter(Boolean);
+
+        let summary = name;
+        if (description) {
+            summary += `\n- ${description}`;
+        }
+        if (params.length > 0) {
+            summary += `\n- Params: ${params.join(', ')}`;
+        }
+        return summary;
     }
 }

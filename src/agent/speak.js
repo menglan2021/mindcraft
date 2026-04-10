@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { TTSConfig as gptTTSConfig } from '../models/gpt.js';
 import { TTSConfig as geminiTTSConfig } from '../models/gemini.js';
+import { TTSConfig as qwenTTSConfig } from '../models/qwen.js';
 
 let speakingQueue = []; // each item: {text, model, audioData, ready}
 let isSpeaking = false;
@@ -30,28 +31,46 @@ async function fetchRemoteAudio(txt, model) {
     function getModelUrl(prov) {
         if (prov === 'openai') return gptTTSConfig.baseUrl;
         if (prov === 'google') return geminiTTSConfig.baseUrl;
+        if (prov === 'qwen') return qwenTTSConfig.baseUrl;
         return 'https://api.openai.com/v1';
     }
 
-    let prov, mdl, voice, url;
+    let prov, mdl, voice, url, params;
     if (typeof model === 'string') {
         [prov, mdl, voice] = model.split('/');
         url = getModelUrl(prov);
+        params = {};
     } else {
         prov = model.api;
         mdl = model.model;
         voice = model.voice;
         url = model.url || getModelUrl(prov);
+        params = model.params || {};
     }
 
     if (prov === 'openai') {
-        return gptTTSConfig.sendAudioRequest(txt, mdl, voice, url);
+        return gptTTSConfig.sendAudioRequest(txt, mdl, voice, url, params);
     } else if (prov === 'google') {
-        return geminiTTSConfig.sendAudioRequest(txt, mdl, voice, url);
+        return geminiTTSConfig.sendAudioRequest(txt, mdl, voice, url, params);
+    } else if (prov === 'qwen') {
+        return qwenTTSConfig.sendAudioRequest(txt, mdl, voice, url, params);
     }
     else {
         throw new Error(`TTS Provider ${prov} is not supported.`);
     }
+}
+
+function detectAudioExtension(audioBuffer) {
+    if (audioBuffer.length >= 12 && audioBuffer.subarray(0, 4).toString() === 'RIFF') {
+        return 'wav';
+    }
+    if (audioBuffer.length >= 3 && audioBuffer.subarray(0, 3).toString() === 'ID3') {
+        return 'mp3';
+    }
+    if (audioBuffer.length >= 2 && audioBuffer[0] === 0xff && (audioBuffer[1] & 0xe0) === 0xe0) {
+        return 'mp3';
+    }
+    return 'mp3';
 }
 
 async function processQueue() {
@@ -111,9 +130,10 @@ async function processQueue() {
         }
 
         try {
+            const audioBuffer = Buffer.from(audioData, 'base64');
             if (isWin) {
                 const tmpPath = path.join(os.tmpdir(), `tts_${Date.now()}.mp3`);
-                await fs.writeFile(tmpPath, Buffer.from(audioData, 'base64'));
+                await fs.writeFile(tmpPath, audioBuffer);
 
                 const player = spawn('ffplay', ['-nodisp', '-autoexit', '-loglevel', 'quiet', tmpPath], {
                     stdio: 'ignore', windowsHide: true
@@ -130,11 +150,31 @@ async function processQueue() {
                     processQueue();
                 });
 
+            } else if (isMac) {
+                const ext = detectAudioExtension(audioBuffer);
+                const tmpPath = path.join(os.tmpdir(), `tts_${Date.now()}.${ext}`);
+                await fs.writeFile(tmpPath, audioBuffer);
+
+                const player = spawn('afplay', [tmpPath], {
+                    stdio: 'ignore'
+                });
+                player.on('error', async (err) => {
+                    console.error('[TTS] afplay error', err);
+                    try { await fs.unlink(tmpPath); } catch {}
+                    isSpeaking = false;
+                    processQueue();
+                });
+                player.on('exit', async () => {
+                    try { await fs.unlink(tmpPath); } catch {}
+                    isSpeaking = false;
+                    processQueue();
+                });
+
             } else {
                 const player = spawn('ffplay', ['-nodisp','-autoexit','pipe:0'], {
                     stdio: ['pipe','ignore','ignore']
                 });
-                player.stdin.write(Buffer.from(audioData, 'base64'));
+                player.stdin.write(audioBuffer);
                 player.stdin.end();
                 player.on('exit', () => {
                     isSpeaking = false;

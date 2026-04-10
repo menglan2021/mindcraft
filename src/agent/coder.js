@@ -27,8 +27,8 @@ export class Coder {
     async generateCode(agent_history) {
         this.agent.bot.modes.pause('unstuck');
         lockdown();
-        // this message history is transient and only maintained in this function
-        let messages = agent_history.getHistory(); 
+        // 编码提示词只保留当前 !newAction 附近的上下文，避免把旧代码和旧结果整段回灌给模型。
+        let messages = this._buildCodingContext(agent_history);
         messages.push({role: 'system', content: 'Code generation started. Write code in codeblock in your response:'});
 
         const MAX_ATTEMPTS = 5;
@@ -108,6 +108,79 @@ export class Coder {
         }
         return `Code generation failed after ${MAX_ATTEMPTS} attempts.`;
     }
+
+    _buildCodingContext(agent_history) {
+        const turns = agent_history.getHistory();
+        const lastNewActionIndex = this._findLastNewActionIndex(turns);
+        const startIndex = lastNewActionIndex === -1
+            ? Math.max(0, turns.length - 6)
+            : Math.max(0, lastNewActionIndex - 2);
+
+        const compactTurns = turns
+            .slice(startIndex)
+            .map(turn => this._compactCodingTurn(turn))
+            .filter(Boolean);
+
+        return compactTurns.slice(-6);
+    }
+
+    _findLastNewActionIndex(turns) {
+        for (let i = turns.length - 1; i >= 0; i--) {
+            if (typeof turns[i].content === 'string' && turns[i].content.includes('!newAction(')) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    _compactCodingTurn(turn) {
+        if (!turn || typeof turn.content !== 'string') {
+            return null;
+        }
+
+        let content = turn.content.trim();
+        if (!content) {
+            return null;
+        }
+
+        if (turn.role === 'system') {
+            content = this._compactSystemMessage(content);
+        }
+
+        return {
+            role: turn.role,
+            content: this._trimForPrompt(content, 1200)
+        };
+    }
+
+    _compactSystemMessage(content) {
+        if (content.startsWith('Agent wrote this code:')) {
+            const output = content.includes('Code Output:')
+                ? content.slice(content.indexOf('Code Output:'))
+                : content;
+            return this._trimForPrompt(
+                `Previous code attempt summary:\n${output}`,
+                500
+            );
+        }
+
+        if (content.startsWith('Code Output:') || content.startsWith('Action output:')) {
+            return this._trimForPrompt(content, 500);
+        }
+
+        if (content.startsWith('Recent behaviors log:')) {
+            return this._trimForPrompt(content, 350);
+        }
+
+        return content;
+    }
+
+    _trimForPrompt(content, maxChars) {
+        if (content.length <= maxChars) {
+            return content;
+        }
+        return `${content.slice(0, maxChars - 31)}\n...[已截断较早的长上下文以减少提示词体积]`;
+    }
     
     async  _lintCode(code) {
         let result = '#### CODE ERROR INFO ###\n';
@@ -124,7 +197,7 @@ export class Coder {
         if (missingSkills.length > 0) {
             result += 'These functions do not exist:\n';
             result += missingSkills.join('\n');
-            console.log(result)
+            console.log(result);
             return result;
         }
 
@@ -199,7 +272,7 @@ export class Coder {
 
     _sanitizeCode(code) {
         code = code.trim();
-        const remove_strs = ['Javascript', 'javascript', 'js']
+        const remove_strs = ['Javascript', 'javascript', 'js'];
         for (let r of remove_strs) {
             if (code.startsWith(r)) {
                 code = code.slice(r.length);

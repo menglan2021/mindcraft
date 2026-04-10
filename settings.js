@@ -1,16 +1,16 @@
 const settings = {
-    "minecraft_version": "auto", // or specific version like "1.21.6"
-    "host": "127.0.0.1", // or "localhost", "your.ip.address.here"
-    "port": 55916, // set to -1 to automatically scan for open ports
-    "auth": "offline", // or "microsoft"
+    "minecraft_version": "auto", // 或填写具体版本，例如 "1.21.6"
+    "host": "127.0.0.1", // 或填写 "localhost"、"your.ip.address.here"
+    "port": 55916, // 设为 -1 时会自动扫描可用端口
+    "auth": "offline", // 离线服保持使用 "offline"
 
-    // the mindserver manages all agents and hosts the UI
+    // mindserver 负责管理所有 agent，并托管 UI
     "mindserver_port": 8080,
-    "auto_open_ui": true, // opens UI in browser on startup
-    
-    "base_profile": "assistant", // survival, assistant, creative, or god_mode
+    "auto_open_ui": true, // 启动时自动在浏览器中打开 UI
+
+    "base_profile": "assistant", // 可选：survival、assistant、creative、god_mode
     "profiles": [
-        "./andy.json",
+        "./sanbai_bot.json",
         // "./profiles/gpt.json",
         // "./profiles/claude.json",
         // "./profiles/gemini.json",
@@ -20,43 +20,43 @@ const settings = {
         // "./profiles/mistral.json",
         // "./profiles/deepseek.json",
         // "./profiles/mercury.json",
-        // "./profiles/andy-4.json", // Supports up to 75 messages!
+        // "./profiles/andy-4.json", // 最多支持 75 条消息上下文
 
-        // using more than 1 profile requires you to /msg each bot indivually
-        // individual profiles override values from the base profile
+        // 使用多个 profile 时，需要通过 /msg 分别和每个 bot 交互
+        // 单个 profile 中的字段会覆盖 base_profile 中的同名配置
     ],
 
-    "load_memory": false, // load memory from previous session
-    "init_message": "Respond with hello world and your name", // sends to all on spawn
-    "only_chat_with": [], // users that the bots listen to and send general messages to. if empty it will chat publicly
+    "load_memory": true, // 是否加载上一次会话的记忆
+    "init_message": "Respond with hello world and your name", // bot 出生后发送给所有 bot 的初始化消息
+    "only_chat_with": [], // 仅监听并回应这些用户；为空时会在公共聊天中交流
 
     "speak": false,
-    // allows all bots to speak through text-to-speech. 
-    // specify speech model inside each profile with format: {provider}/{model}/{voice}.
-    // if set to "system" it will use basic system text-to-speech. 
-    // Works on windows and mac, but linux requires you to install the espeak package through your package manager eg: `apt install espeak` `pacman -S espeak`.
+    // 是否允许所有 bot 使用文字转语音朗读
+    // 在各自 profile 中通过 {provider}/{model}/{voice} 的格式指定语音模型
+    // 如果设为 "system"，则使用系统自带的基础语音功能
+    // Windows 和 macOS 可直接使用；Linux 需要先安装 espeak，例如 `apt install espeak` 或 `pacman -S espeak`
 
-    "chat_ingame": true, // bot responses are shown in minecraft chat
-    "language": "en", // translate to/from this language. Supports these language names: https://cloud.google.com/translate/docs/languages
-    "render_bot_view": false, // show bot's view in browser at localhost:3000, 3001...
+    "chat_ingame": true, // 是否把 bot 的回复显示在 Minecraft 聊天中
+    "language": "en", // 自动翻译所使用的目标语言；支持的语言名称见 https://cloud.google.com/translate/docs/languages
+    "render_bot_view": false, // 是否在浏览器中展示 bot 视角，端口一般为 localhost:3000、3001 等
 
-    "allow_insecure_coding": false, // allows newAction command and model can write/run code on your computer. enable at own risk
-    "allow_vision": false, // allows vision model to interpret screenshots as inputs
-    "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"] , // commands to disable and remove from docs. Ex: ["!setMode"]
-    "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
-    "relevant_docs_count": 5, // number of relevant code function docs to select for prompting. -1 for all
+    "allow_insecure_coding": true, // 是否允许 `newAction`，开启后模型可在你的电脑上写代码和执行代码，请自行承担风险
+    "allow_vision": false, // 是否允许视觉模型将截图作为输入进行理解
+    "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"] , // 要禁用并从文档中移除的命令，例如 ["!setMode"]
+    "code_timeout_mins": -1, // 代码允许执行的分钟数；-1 表示不限制
+    "relevant_docs_count": 5, // 提示词中选取多少条相关代码函数文档；-1 表示全部加入
 
-    "max_messages": 15, // max number of messages to keep in context
-    "num_examples": 2, // number of examples to give to the model
-    "max_commands": -1, // max number of commands that can be used in consecutive responses. -1 for no limit
-    "show_command_syntax": "full", // "full", "shortened", or "none"
-    "narrate_behavior": true, // chat simple automatic actions ('Picking up item!')
-    "chat_bot_messages": true, // publicly chat messages to other bots
+    "max_messages": 15, // 上下文中最多保留多少条消息
+    "num_examples": 2, // 提供给模型的示例数量
+    "max_commands": -1, // 单次连续回复中最多可使用多少个命令；-1 表示不限制
+    "show_command_syntax": "full", // 可选："full"、"shortened"、"none"
+    "narrate_behavior": true, // 是否把简单自动行为发到聊天中，例如“Picking up item!”
+    "chat_bot_messages": true, // 是否公开显示 bot 之间的聊天消息
 
-    "spawn_timeout": 30, // num seconds allowed for the bot to spawn before throwing error. Increase when spawning takes a while.
-    "block_place_delay": 0, // delay between placing blocks (ms) if using newAction. helps avoid bot being kicked by anti-cheat mechanisms on servers.
-  
-    "log_all_prompts": false, // log ALL prompts to file
+    "spawn_timeout": 30, // bot 出生允许等待的秒数，超时会报错；如果出生较慢可适当调大
+    "block_place_delay": 0, // 使用 `newAction` 放置方块时的延迟（毫秒），可降低被反作弊踢出的概率
+
+    "log_all_prompts": false, // 是否把所有提示词完整写入日志文件
 
 }
 
