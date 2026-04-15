@@ -16,6 +16,7 @@
 - `24454/UDP` 对外提供 Simple Voice Chat
 - `8787/TCP` 仅容器内网使用，不对公网开放
 - `8080/TCP` 为 Mindcraft UI，默认只绑定到 `127.0.0.1`
+- `MindServer` 在容器内会绑定到 `0.0.0.0`，这样同容器 agent 和 Docker 端口映射都能正常工作
 
 ## 1. 版本与前提
 
@@ -173,7 +174,7 @@ vim deploy/cloud/.env
 
 - `OPS=你的游戏管理员ID`
 - `RCON_PASSWORD=强密码`
-- 如果内存不是 6G，调整 `MC_MEMORY`
+- 如果你要给 Minecraft 更多或更少内存，调整 `MC_MEMORY`
 - 如果你要开放 UI 给反代或隧道使用，再调整 `MINDSERVER_BIND`
 
 ### 6.2 创建 Minecraft 数据目录
@@ -190,6 +191,18 @@ cp mindcraft-voice-bridge/target/mindcraft-voice-bridge-0.1.0.jar deploy/cloud/r
 ```
 
 这一步完成后，Paper 容器第一次启动时就会直接加载这两个插件。
+
+另外，当前 `deploy/cloud/docker-compose.yml` 已经默认给 `mindcraft` 容器设置：
+
+```yaml
+MINDSERVER_HOST_PUBLIC: "true"
+```
+
+不要删掉这项。Docker 场景下需要它把容器内的 MindServer 绑定到 `0.0.0.0`，否则可能出现：
+
+- `MindServer running on port 8080 on host localhost`
+- agent 随后连接 `127.0.0.1:8080`
+- 最终报 `xhr poll error` / `ECONNREFUSED`
 
 ## 7. 首次启动 Paper，生成配置文件
 
@@ -302,6 +315,8 @@ docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml l
 docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml up -d --build mindcraft
 docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml logs -f mindcraft
 ```
+
+如果这是第一次切到新版本部署，或者你刚更新了 `main.js` / `src/mindcraft/*`，务必带 `--build`，否则容器里可能还是旧镜像。
 
 不建议第一次就直接 `up -d` 全部服务，因为那样很难区分问题到底出在：
 
@@ -488,6 +503,20 @@ docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml u
 
 - `show_command_syntax` 保持为 `none`
 - `narrate_behavior` 保持为 `false`
+
+### 15.6 `mindcraft` 容器启动时报 `xhr poll error`
+
+如果日志类似：
+
+- `MindServer running on port 8080 on host localhost`
+- `Connecting to MindServer`
+- `connect ECONNREFUSED 127.0.0.1:8080`
+
+优先检查：
+
+- `deploy/cloud/docker-compose.yml` 里是否存在 `MINDSERVER_HOST_PUBLIC: "true"`
+- 是否执行了 `docker compose ... up -d --build mindcraft`
+- 旧容器是否还在跑旧镜像，可先 `docker compose ... rm -sf mindcraft` 再重新 `up -d --build`
 
 ## 16. 官方参考
 

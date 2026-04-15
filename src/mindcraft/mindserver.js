@@ -45,7 +45,7 @@ export function logoutAgent(agentName) {
 }
 
 // Initialize the server
-export function createMindServer(host_public = false, port = 8080) {
+export async function createMindServer(host_public = false, port = 8080) {
     const app = express();
     server = http.createServer(app);
     io = new Server(server);
@@ -217,12 +217,18 @@ export function createMindServer(host_public = false, port = 8080) {
         });
     });
 
-    if (host_public) {
-        console.log('Public hosting not supported yet. Using localhost.');
-    }
-    const host = 'localhost';
-    server.listen(port, host, () => {
-        console.log(`MindServer running on port ${port} on host ${host}`);
+    const host = host_public ? '0.0.0.0' : '127.0.0.1';
+    await new Promise((resolve, reject) => {
+        const onError = (error) => {
+            server.off('error', onError);
+            reject(error);
+        };
+        server.once('error', onError);
+        server.listen(port, host, () => {
+            server.off('error', onError);
+            console.log(`MindServer running on port ${port} on host ${host}`);
+            resolve();
+        });
     });
 
     return server;

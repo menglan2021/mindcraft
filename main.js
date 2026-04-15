@@ -44,6 +44,9 @@ if (process.env.MINECRAFT_PORT) {
 if (process.env.MINDSERVER_PORT) {
     settings.mindserver_port = process.env.MINDSERVER_PORT;
 }
+if (process.env.MINDSERVER_HOST_PUBLIC) {
+    settings.mindserver_host_public = process.env.MINDSERVER_HOST_PUBLIC !== 'false';
+}
 if (process.env.PROFILES && JSON.parse(process.env.PROFILES).length > 0) {
     settings.profiles = JSON.parse(process.env.PROFILES);
 }
@@ -114,12 +117,10 @@ if (process.env.SETTINGS_JSON) {
         console.error("Failed to parse environment variable for SETTINGS_JSON:", err);
     }
 }
-
-
-Mindcraft.init(false, settings.mindserver_port, settings.auto_open_ui);
+await Mindcraft.init(settings.mindserver_host_public, settings.mindserver_port, settings.auto_open_ui);
 
 for (let profile of settings.profiles) {
     const profile_json = JSON.parse(readFileSync(profile, 'utf8'));
     settings.profile = profile_json;
-    Mindcraft.createAgent(settings);
+    await Mindcraft.createAgent(settings);
 }

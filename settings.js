@@ -6,6 +6,7 @@ const settings = {
 
     // mindserver 负责管理所有 agent，并托管 UI
     "mindserver_port": 8080,
+    "mindserver_host_public": false, // 是否把 MindServer 绑定到 0.0.0.0；Docker/反代场景需要开启，本机单机运行建议保持 false
     "auto_open_ui": true, // 启动时自动在浏览器中打开 UI
 
     "base_profile": "assistant", // 可选：survival、assistant、creative、god_mode

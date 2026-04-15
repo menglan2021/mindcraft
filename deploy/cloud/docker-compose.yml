@@ -1,73 +1,139 @@
 services:
+  # Minecraft 正式服容器。2C4G 机器上，资源优先分配给它。
   minecraft:
+    # 官方 itzg 镜像，使用 Java 21，和当前本地联调环境保持一致。
     image: itzg/minecraft-server:java21
+    # 固定容器名，便于运维时直接 attach、logs、exec。
     container_name: mindcraft-minecraft
+    # 异常退出后自动重启，适合云服务器常驻运行。
     restart: unless-stopped
+    # 保留 TTY，便于接管控制台观察实时日志。
     tty: true
+    # 允许标准输入，便于向控制台发送 stop 等命令。
     stdin_open: true
+    # 给 Paper 预留完整存盘时间，避免强退损坏世界。
     stop_grace_period: 1m
     environment:
+      # 必须显式同意 Mojang EULA，否则服务端不会启动。
       EULA: "TRUE"
+      # 服务端类型固定为 Paper。
       TYPE: "PAPER"
+      # Minecraft 主版本，和本地测试版本保持一致。
       VERSION: "1.21.6"
+      # Paper 构建号，和本地使用的 paper-1.21.6-48.jar 保持一致。
       PAPER_BUILD: "48"
+      # Paper JVM 堆内存。2C4G 机器进一步收紧到 1536M，更稳，代价是视距和并发能力要保守一些。
       MEMORY: "${MC_MEMORY:-6G}"
+      # 启用 Aikar GC 参数，低内存 Paper 服通常比默认参数更稳。
       USE_AIKAR_FLAGS: "TRUE"
+      # 容器时区，影响日志时间和部分计划任务时间显示。
       TZ: "${TZ:-Asia/Shanghai}"
+      # 当前方案默认离线服，便于 bot 使用 offline 模式接入。
       ONLINE_MODE: "${ONLINE_MODE:-FALSE}"
+      # 游戏模式默认 survival，和常规生存服一致。
       MODE: "${MODE:-survival}"
+      # 默认难度 normal，避免 2C4G 机器上 hostile mob 压力过大。
       DIFFICULTY: "${DIFFICULTY:-normal}"
+      # 2C4G 机器默认只建议 2 人以内同时在线。
       MAX_PLAYERS: "${MAX_PLAYERS:-10}"
+      # 降低服务端视距，明显减少区块加载和网络同步压力。
+      VIEW_DISTANCE: "${VIEW_DISTANCE:-6}"
+      # 降低实体和红石的模拟距离，进一步减轻 CPU 压力。
+      SIMULATION_DISTANCE: "${SIMULATION_DISTANCE:-4}"
+      # 服务器列表里展示的 MOTD。
       MOTD: "${MOTD:-Mindcraft Voice Server}"
+      # 服务端名称，供部分插件或查询接口展示。
       SERVER_NAME: "${SERVER_NAME:-Mindcraft Voice Server}"
+      # 开启 RCON，方便远程运维和自动化管理。
       ENABLE_RCON: "TRUE"
+      # RCON 密码，生产环境必须改成强密码。
       RCON_PASSWORD: "${RCON_PASSWORD:-change-me}"
+      # 游戏内管理员列表，至少填你自己的玩家 ID。
       OPS: "${OPS:-}"
     volumes:
+      # 持久化 Minecraft 世界、配置、日志和插件数据。
       - ./runtime/minecraft-data:/data
     ports:
+      # Minecraft 游戏连接 TCP 端口。
       - "${MC_PUBLIC_PORT:-25565}:25565"
+      # Simple Voice Chat 语音 UDP 端口，必须独立开放。
       - "${VOICECHAT_PUBLIC_PORT:-24454}:24454/udp"
     networks:
+      # 加入内部桥接网络，供 Mindcraft 通过容器名访问。
       - mindcraft-net
 
+  # Mindcraft bot 容器。2C4G 机器上保持单 bot、不开渲染视图最稳。
   mindcraft:
     build:
+      # 构建上下文使用仓库根目录，便于复制项目代码。
       context: ../..
+      # 使用云部署专用 Dockerfile，运行时固定为 Node 20。
       dockerfile: deploy/cloud/mindcraft.Dockerfile
+    # 固定容器名，便于日志和重启操作。
     container_name: mindcraft-bot
+    # 异常退出后自动重启，避免 bot 因临时异常长期离线。
     restart: unless-stopped
     depends_on:
+      # 先等 Minecraft 容器起来，再启动 Mindcraft。
       - minecraft
     environment:
+      # 容器时区，和服务端日志保持一致。
       TZ: "${TZ:-Asia/Shanghai}"
+      # Docker 部署时把 MindServer 绑定到 0.0.0.0，避免容器内只监听 localhost 导致 UI 和 agent 连接异常。
+      MINDSERVER_HOST_PUBLIC: "true"
+      # 限制 Node.js 旧生代堆上限，避免 2C4G 机器被 bot 进程吃满内存。
+      NODE_OPTIONS: "${NODE_OPTIONS:---max-old-space-size=768}"
+      # Mindcraft Web UI 监听的容器内端口。
       MINDSERVER_PORT: "8080"
+      # 默认只启动一个 bot profile，避免 2C4G 机器上多 bot 抢资源。
       PROFILES: '["./sanbai_bot.json"]'
+      # 语音输出走游戏内 Simple Voice Chat，而不是本机音箱。
       VOICE_OUTPUT_MODE: "minecraft_voicechat"
+      # 语音桥接插件在 Docker 网络中的服务名。
       VOICE_BRIDGE_HOST: "minecraft"
+      # 语音桥接插件监听的 WebSocket 端口。
       VOICE_BRIDGE_PORT: "8787"
+      # 开启流式推送，缩短 bot 开口的首包延迟。
       VOICE_STREAMING: "true"
+      # 插件当前只接受 48kHz 单声道 PCM。
       VOICE_TARGET_SAMPLE_RATE: "48000"
+      # 是否开启玩家语音上行到 STT，再送入 bot。
       VOICE_INPUT_ENABLED: "${VOICE_INPUT_ENABLED:-true}"
+      # 是否把 STT 结果显示到游戏聊天栏，但不会再次触发 bot。
       VOICE_INPUT_ECHO_TO_CHAT: "${VOICE_INPUT_ECHO_TO_CHAT:-true}"
+      # 玩家语音转文字模型，当前默认使用千问 ASR。
       VOICE_INPUT_STT_MODEL: "${VOICE_INPUT_STT_MODEL:-qwen/qwen3-asr-flash}"
+      # STT 目标语言，当前按中文转写。
       VOICE_INPUT_LANGUAGE: "${VOICE_INPUT_LANGUAGE:-zh}"
+      # 语音结束静默判定，避免玩家话没说完就触发转写。
       VOICE_INPUT_END_SILENCE_MS: "${VOICE_INPUT_END_SILENCE_MS:-900}"
+      # 过短语音直接丢弃，减少误触发。
       VOICE_INPUT_MIN_DURATION_MS: "${VOICE_INPUT_MIN_DURATION_MS:-700}"
+      # 单句最长 15 秒，避免无限积累音频导致延迟和内存上升。
       VOICE_INPUT_MAX_DURATION_MS: "${VOICE_INPUT_MAX_DURATION_MS:-15000}"
-      VOICE_INPUT_TRIGGER_COOLDOWN_MS: "${VOICE_INPUT_TRIGGER_COOLDOWN_MS:-500}"
+      # 两次转写触发之间至少冷却 500ms，降低抖动触发概率。
+      VOICE_INPUT_TRIGGER_COOLDOWN_MS: "${VOICE_INPUT_TRIGGER_COOLDOWN_MS:-5000}"
+      # 把少量运行时配置直接覆盖到 settings.js。
       SETTINGS_JSON: >-
         {"host":"minecraft","port":25565,"auth":"offline","auto_open_ui":false,"chat_ingame":true,"speak":true,"render_bot_view":false}
     volumes:
+      # 挂载全局 settings.js，保留你的主配置。
       - ../../settings.js:/app/settings.js:ro
+      # 挂载默认 bot 配置文件。
       - ../../sanbai_bot.json:/app/sanbai_bot.json:ro
+      # 挂载 API keys，容器内只读使用。
       - ../../keys.json:/app/keys.json:ro
+      # 挂载 bot 运行时数据目录。
       - ../../bots:/app/bots
     ports:
+      # Web UI 默认只绑定到服务器本机，建议通过 SSH 隧道或反代访问。
       - "${MINDSERVER_BIND:-127.0.0.1}:${MINDSERVER_PUBLIC_PORT:-8080}:8080"
     networks:
+      # 加入与 Minecraft 相同的内部网络。
       - mindcraft-net
 
 networks:
+  # 内部桥接网络，用于 Mindcraft 和 Minecraft 通过容器名互访。
   mindcraft-net:
+    # 使用默认 bridge 网络驱动即可满足同机部署。
     driver: bridge
