@@ -1,0 +1,73 @@
+services:
+  minecraft:
+    image: itzg/minecraft-server:java21
+    container_name: mindcraft-minecraft
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    stop_grace_period: 1m
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "1.21.6"
+      PAPER_BUILD: "48"
+      MEMORY: "${MC_MEMORY:-6G}"
+      USE_AIKAR_FLAGS: "TRUE"
+      TZ: "${TZ:-Asia/Shanghai}"
+      ONLINE_MODE: "${ONLINE_MODE:-FALSE}"
+      MODE: "${MODE:-survival}"
+      DIFFICULTY: "${DIFFICULTY:-normal}"
+      MAX_PLAYERS: "${MAX_PLAYERS:-10}"
+      MOTD: "${MOTD:-Mindcraft Voice Server}"
+      SERVER_NAME: "${SERVER_NAME:-Mindcraft Voice Server}"
+      ENABLE_RCON: "TRUE"
+      RCON_PASSWORD: "${RCON_PASSWORD:-change-me}"
+      OPS: "${OPS:-}"
+    volumes:
+      - ./runtime/minecraft-data:/data
+    ports:
+      - "${MC_PUBLIC_PORT:-25565}:25565"
+      - "${VOICECHAT_PUBLIC_PORT:-24454}:24454/udp"
+    networks:
+      - mindcraft-net
+
+  mindcraft:
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/mindcraft.Dockerfile
+    container_name: mindcraft-bot
+    restart: unless-stopped
+    depends_on:
+      - minecraft
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+      MINDSERVER_PORT: "8080"
+      PROFILES: '["./sanbai_bot.json"]'
+      VOICE_OUTPUT_MODE: "minecraft_voicechat"
+      VOICE_BRIDGE_HOST: "minecraft"
+      VOICE_BRIDGE_PORT: "8787"
+      VOICE_STREAMING: "true"
+      VOICE_TARGET_SAMPLE_RATE: "48000"
+      VOICE_INPUT_ENABLED: "${VOICE_INPUT_ENABLED:-true}"
+      VOICE_INPUT_ECHO_TO_CHAT: "${VOICE_INPUT_ECHO_TO_CHAT:-true}"
+      VOICE_INPUT_STT_MODEL: "${VOICE_INPUT_STT_MODEL:-qwen/qwen3-asr-flash}"
+      VOICE_INPUT_LANGUAGE: "${VOICE_INPUT_LANGUAGE:-zh}"
+      VOICE_INPUT_END_SILENCE_MS: "${VOICE_INPUT_END_SILENCE_MS:-900}"
+      VOICE_INPUT_MIN_DURATION_MS: "${VOICE_INPUT_MIN_DURATION_MS:-700}"
+      VOICE_INPUT_MAX_DURATION_MS: "${VOICE_INPUT_MAX_DURATION_MS:-15000}"
+      VOICE_INPUT_TRIGGER_COOLDOWN_MS: "${VOICE_INPUT_TRIGGER_COOLDOWN_MS:-500}"
+      SETTINGS_JSON: >-
+        {"host":"minecraft","port":25565,"auth":"offline","auto_open_ui":false,"chat_ingame":true,"speak":true,"render_bot_view":false}
+    volumes:
+      - ../../settings.js:/app/settings.js:ro
+      - ../../sanbai_bot.json:/app/sanbai_bot.json:ro
+      - ../../keys.json:/app/keys.json:ro
+      - ../../bots:/app/bots
+    ports:
+      - "${MINDSERVER_BIND:-127.0.0.1}:${MINDSERVER_PUBLIC_PORT:-8080}:8080"
+    networks:
+      - mindcraft-net
+
+networks:
+  mindcraft-net:
+    driver: bridge

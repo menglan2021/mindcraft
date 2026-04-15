@@ -1,6 +1,7 @@
 .vscode/
 .idea/
 node_modules/
+.m2/
 package-lock.json
 code_records/
 scratch.js
@@ -28,3 +29,8 @@ tasks/construction_tasks/train/**
 server_data*
 **/.DS_Store
 src/mindcraft-py/__pycache__/
+mindcraft-voice-bridge/target/
+deploy/cloud/.env
+deploy/cloud/runtime/
+paper-*.jar
+voicechat-bukkit-*.jar

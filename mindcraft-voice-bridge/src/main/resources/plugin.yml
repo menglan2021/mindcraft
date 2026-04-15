@@ -1,0 +1,14 @@
+name: MindcraftVoiceBridge
+version: 0.1.0
+main: com.mindcraft.voicebridge.MindcraftVoiceBridgePlugin
+api-version: '1.21'
+depend: [ voicechat ]
+commands:
+  voicebridge:
+    description: 查看或重载 Mindcraft 语音桥接状态
+    usage: /voicebridge [status|reload]
+    permission: mindcraft.voicebridge.admin
+permissions:
+  mindcraft.voicebridge.admin:
+    description: 允许查看或重载语音桥接插件
+    default: op

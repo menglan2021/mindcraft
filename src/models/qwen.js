@@ -1,5 +1,5 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 import { randomUUID } from 'crypto';
 import { WebSocket as UndiciWebSocket } from 'undici';
@@ -9,76 +9,139 @@ export class Qwen {
     constructor(model_name, url, params) {
         this.model_name = model_name;
         this.params = params;
-        let config = {};
-
-        config.baseURL = url || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-        config.apiKey = getKey('QWEN_API_KEY');
+        const config = {
+            baseURL: url || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+            apiKey: getKey('QWEN_API_KEY'),
+        };
 
         this.openai = new OpenAIApi(config);
     }
 
-    async sendRequest(turns, systemMessage, stop_seq='***') {
-        let messages = [{'role': 'system', 'content': systemMessage}].concat(turns);
+    async sendRequest(turns, systemMessage, stop_seq = '***') {
+        let messages = [{ role: 'system', content: systemMessage }].concat(turns);
 
         messages = strictFormat(messages);
 
         const pack = {
-            model: this.model_name || "qwen-plus",
+            model: this.model_name || 'qwen-plus',
             messages,
             stop: stop_seq,
-            ...(this.params || {})
+            ...(this.params || {}),
         };
 
         let res = null;
         try {
             console.log('Awaiting Qwen api response...');
-            // console.log('Messages:', messages);
-            let completion = await this.openai.chat.completions.create(pack);
-            if (completion.choices[0].finish_reason == 'length')
+            const completion = await this.openai.chat.completions.create(pack);
+            if (completion.choices[0].finish_reason === 'length') {
                 throw new Error('Context length exceeded');
+            }
             console.log('Received.');
             res = completion.choices[0].message.content;
-        }
-        catch (err) {
-            if ((err.message == 'Context length exceeded' || err.code == 'context_length_exceeded') && turns.length > 1) {
+        } catch (err) {
+            if ((err.message === 'Context length exceeded' || err.code === 'context_length_exceeded') && turns.length > 1) {
                 console.log('Context length exceeded, trying again with shorter context.');
                 return await this.sendRequest(turns.slice(1), systemMessage, stop_seq);
-            } else {
-                console.log(err);
-                res = 'My brain disconnected, try again.';
             }
+            console.log(err);
+            res = 'My brain disconnected, try again.';
         }
         return res;
     }
 
-    // Why random backoff?
-    // With a 30 requests/second limit on Alibaba Qwen's embedding service,
-    // random backoff helps maximize bandwidth utilization.
     async embed(text) {
-        const maxRetries = 5; // Maximum number of retries
-        for (let retries = 0; retries < maxRetries; retries++) {
+        const maxRetries = 5;
+        for (let retries = 0; retries < maxRetries; retries += 1) {
             try {
                 const { data } = await this.openai.embeddings.create({
-                    model: this.model_name || "text-embedding-v3",
+                    model: this.model_name || 'text-embedding-v3',
                     input: text,
-                    encoding_format: "float",
+                    encoding_format: 'float',
                 });
                 return data[0].embedding;
             } catch (err) {
                 if (err.status === 429) {
-                    // If a rate limit error occurs, calculate the exponential backoff with a random delay (1-5 seconds)
                     const delay = Math.pow(2, retries) * 1000 + Math.floor(Math.random() * 2000);
-                    // console.log(`Rate limit hit, retrying in ${delay} ms...`);
-                    await new Promise(resolve => setTimeout(resolve, delay)); // Wait for the delay before retrying
+                    await new Promise((resolve) => setTimeout(resolve, delay));
                 } else {
                     throw err;
                 }
             }
         }
-        // If maximum retries are reached and the request still fails, throw an error
         throw new Error('Max retries reached, request failed.');
     }
+}
 
+class AsyncChunkQueue {
+    constructor() {
+        this.items = [];
+        this.waiters = [];
+        this.error = null;
+        this.done = false;
+    }
+
+    push(value) {
+        if (this.done || this.error) return;
+        const waiter = this.waiters.shift();
+        if (waiter) {
+            waiter.resolve({ value, done: false });
+            return;
+        }
+        this.items.push(value);
+    }
+
+    finish() {
+        if (this.done || this.error) return;
+        this.done = true;
+        while (this.waiters.length > 0) {
+            this.waiters.shift().resolve({ value: undefined, done: true });
+        }
+    }
+
+    fail(error) {
+        if (this.done || this.error) return;
+        this.error = error;
+        while (this.waiters.length > 0) {
+            this.waiters.shift().reject(error);
+        }
+    }
+
+    async next() {
+        if (this.items.length > 0) {
+            return { value: this.items.shift(), done: false };
+        }
+        if (this.error) {
+            throw this.error;
+        }
+        if (this.done) {
+            return { value: undefined, done: true };
+        }
+        return await new Promise((resolve, reject) => {
+            this.waiters.push({ resolve, reject });
+        });
+    }
+
+    [Symbol.asyncIterator]() {
+        return this;
+    }
+}
+
+function createAbortError(message = 'Qwen 语音请求已取消。') {
+    const error = new Error(message);
+    error.name = 'AbortError';
+    return error;
+}
+
+function throwIfAborted(signal, message) {
+    if (!signal?.aborted) return;
+    const reason = signal.reason;
+    if (reason instanceof Error) {
+        throw reason;
+    }
+    if (typeof reason === 'string' && reason.trim() !== '') {
+        throw createAbortError(reason);
+    }
+    throw createAbortError(message);
 }
 
 function getTtsBaseUrl(url) {
@@ -121,230 +184,8 @@ function isRealtimeTtsModel(model) {
     return typeof model === 'string' && model.includes('-realtime');
 }
 
-async function sendRealtimeAudioRequest(text, model, voice, url, params = {}) {
-    const baseUrl = getRealtimeTtsBaseUrl(url);
-    const wsUrl = `${baseUrl}?model=${encodeURIComponent(model || 'qwen3-tts-flash-realtime')}`;
-
-    return await new Promise((resolve, reject) => {
-        const pcmChunks = [];
-        let settled = false;
-        let sessionUpdated = false;
-        let responseDone = false;
-
-        const ws = new UndiciWebSocket(wsUrl, {
-            headers: {
-                Authorization: `bearer ${getKey('QWEN_API_KEY')}`,
-            },
-        });
-
-        const cleanup = () => {
-            if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
-                try {
-                    ws.close();
-                } catch {}
-            }
-        };
-
-        const fail = (err) => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            reject(err);
-        };
-
-        const succeed = () => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            if (pcmChunks.length === 0) {
-                reject(new Error('Qwen realtime TTS returned no audio data.'));
-                return;
-            }
-            const pcmBuffer = Buffer.concat(pcmChunks);
-            const wavHeader = createWavHeader(pcmBuffer.length, params.sample_rate || 24000, 1, 16);
-            resolve(Buffer.concat([wavHeader, pcmBuffer]).toString('base64'));
-        };
-
-        const sendEvent = (type, payload = {}) => {
-            ws.send(JSON.stringify({
-                event_id: `event_${randomUUID()}`,
-                type,
-                ...payload,
-            }));
-        };
-
-        ws.addEventListener('open', () => {
-            const session = {
-                voice: voice || params.voice || 'Cherry',
-                mode: params.mode || 'commit',
-                language_type: params.language_type || params.languageType || inferLanguageType(text),
-                response_format: params.response_format || params.responseFormat || 'pcm',
-                sample_rate: params.sample_rate || params.sampleRate || 24000,
-            };
-            if (params.instructions) {
-                session.instructions = params.instructions;
-            }
-            if (params.optimize_instructions !== undefined) {
-                session.optimize_instructions = params.optimize_instructions;
-            } else if (params.optimizeInstructions !== undefined) {
-                session.optimize_instructions = params.optimizeInstructions;
-            }
-
-            sendEvent('session.update', { session });
-        });
-
-        ws.addEventListener('message', (event) => {
-            try {
-                const message = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8');
-                const data = JSON.parse(message);
-                const type = data.type;
-
-                if (type === 'error') {
-                    fail(new Error(`Qwen realtime TTS error: ${JSON.stringify(data)}`));
-                    return;
-                }
-
-                if (type === 'session.updated') {
-                    if (sessionUpdated) return;
-                    sessionUpdated = true;
-                    sendEvent('input_text_buffer.append', { text });
-                    sendEvent('input_text_buffer.commit');
-                    sendEvent('session.finish');
-                    return;
-                }
-
-                if (type === 'response.audio.delta' && data.delta) {
-                    pcmChunks.push(Buffer.from(data.delta, 'base64'));
-                    return;
-                }
-
-                if (type === 'response.done') {
-                    responseDone = true;
-                    return;
-                }
-
-                if (type === 'session.finished') {
-                    if (responseDone || pcmChunks.length > 0) {
-                        succeed();
-                    } else {
-                        fail(new Error(`Qwen realtime TTS finished without audio: ${message}`));
-                    }
-                }
-            } catch (err) {
-                fail(err);
-            }
-        });
-
-        ws.addEventListener('error', (event) => {
-            fail(new Error(`Qwen realtime TTS websocket error: ${event.message || 'unknown error'}`));
-        });
-
-        ws.addEventListener('close', () => {
-            if (!settled) {
-                if (responseDone && pcmChunks.length > 0) {
-                    succeed();
-                } else {
-                    fail(new Error('Qwen realtime TTS websocket closed before audio completed.'));
-                }
-            }
-        });
-    });
-}
-
-const sendAudioRequest = async (text, model, voice, url, params = {}) => {
-    if (isRealtimeTtsModel(model)) {
-        return sendRealtimeAudioRequest(text, model, voice, url, params);
-    }
-
-    const baseUrl = getTtsBaseUrl(url);
-    const endpoint = `${baseUrl}/services/aigc/multimodal-generation/generation`;
-    const requestBody = {
-        model: model || 'qwen3-tts-flash',
-        input: {
-            text,
-            voice: voice || params.voice || 'Cherry',
-            language_type: params.language_type || params.languageType || inferLanguageType(text),
-        }
-    };
-
-    const generationParams = { ...params };
-    delete generationParams.voice;
-    delete generationParams.language_type;
-    delete generationParams.languageType;
-    if (Object.keys(generationParams).length > 0) {
-        requestBody.parameters = generationParams;
-    }
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${getKey('QWEN_API_KEY')}`,
-            'Content-Type': 'application/json',
-            'X-DashScope-SSE': 'enable',
-        },
-        body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-        throw new Error(`Qwen TTS request failed (${response.status}): ${await response.text()}`);
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('text/event-stream')) {
-        const data = await response.json();
-        const audioBase64 = data.output?.audio?.data;
-        if (audioBase64) {
-            return audioBase64;
-        }
-        throw new Error(`Qwen TTS did not return stream audio data: ${JSON.stringify(data)}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-        throw new Error('Qwen TTS response body is empty.');
-    }
-
-    const decoder = new TextDecoder();
-    let pending = '';
-    const pcmChunks = [];
-
-    while (true) {
-        const { value, done } = await reader.read();
-        if (value) {
-            pending += decoder.decode(value, { stream: !done });
-            let boundaryMatch = pending.match(/\r?\n\r?\n/);
-            while (boundaryMatch) {
-                const boundaryIndex = boundaryMatch.index;
-                const boundaryLength = boundaryMatch[0].length;
-                const eventBlock = pending.slice(0, boundaryIndex);
-                pending = pending.slice(boundaryIndex + boundaryLength);
-
-                for (const line of eventBlock.split(/\r?\n/)) {
-                    if (!line.startsWith('data:')) continue;
-                    const payload = line.slice(5).trim();
-                    if (!payload || payload === '[DONE]') continue;
-
-                    const data = JSON.parse(payload);
-                    const audioData = data.output?.audio?.data;
-                    if (audioData) {
-                        pcmChunks.push(Buffer.from(audioData, 'base64'));
-                    }
-                }
-
-                boundaryMatch = pending.match(/\r?\n\r?\n/);
-            }
-        }
-
-        if (done) break;
-    }
-
-    if (pcmChunks.length === 0) {
-        throw new Error('Qwen TTS stream returned no audio data.');
-    }
-
-    const pcmBuffer = Buffer.concat(pcmChunks);
-    const wavHeader = createWavHeader(pcmBuffer.length, 24000, 1, 16);
-    return Buffer.concat([wavHeader, pcmBuffer]).toString('base64');
+function getOutputSampleRate(params = {}) {
+    return params.sample_rate || params.sampleRate || 24000;
 }
 
 function createWavHeader(dataLength, sampleRate, channels, bitsPerSample) {
@@ -368,7 +209,290 @@ function createWavHeader(dataLength, sampleRate, channels, bitsPerSample) {
     return header;
 }
 
+async function collectAudioStream(stream) {
+    const chunks = [];
+    for await (const chunk of stream) {
+        if (chunk?.length) {
+            chunks.push(Buffer.from(chunk));
+        }
+    }
+    if (chunks.length === 0) {
+        throw new Error('Qwen TTS returned no audio data.');
+    }
+    return Buffer.concat(chunks);
+}
+
+function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
+    const signal = params.signal;
+    throwIfAborted(signal);
+
+    const baseUrl = getRealtimeTtsBaseUrl(url);
+    const wsUrl = `${baseUrl}?model=${encodeURIComponent(model || 'qwen3-tts-flash-realtime')}`;
+    const queue = new AsyncChunkQueue();
+
+    let socket = null;
+    let settled = false;
+    let sessionUpdated = false;
+    let responseDone = false;
+    let sessionFinished = false;
+    let receivedAudio = false;
+
+    const closeSocket = () => {
+        if (socket && (socket.readyState === 0 || socket.readyState === 1)) {
+            try {
+                socket.close();
+            } catch {}
+        }
+    };
+
+    const cleanup = () => {
+        if (signal && abortHandler) {
+            signal.removeEventListener('abort', abortHandler);
+        }
+    };
+
+    const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        closeSocket();
+        queue.fail(error);
+    };
+
+    const finish = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        closeSocket();
+        if (!receivedAudio) {
+            queue.fail(new Error('Qwen realtime TTS returned no audio data.'));
+            return;
+        }
+        queue.finish();
+    };
+
+    const sendEvent = (type, payload = {}) => {
+        socket.send(JSON.stringify({
+            event_id: `event_${randomUUID()}`,
+            type,
+            ...payload,
+        }));
+    };
+
+    const abortHandler = () => {
+        fail(createAbortError());
+    };
+
+    if (signal) {
+        signal.addEventListener('abort', abortHandler, { once: true });
+    }
+
+    socket = new UndiciWebSocket(wsUrl, {
+        headers: {
+            Authorization: `bearer ${getKey('QWEN_API_KEY')}`,
+        },
+    });
+
+    socket.addEventListener('open', () => {
+        const session = {
+            voice: voice || params.voice || 'Cherry',
+            mode: params.mode || 'commit',
+            language_type: params.language_type || params.languageType || inferLanguageType(text),
+            response_format: params.response_format || params.responseFormat || 'pcm',
+            sample_rate: getOutputSampleRate(params),
+        };
+
+        if (params.instructions) {
+            session.instructions = params.instructions;
+        }
+        if (params.optimize_instructions !== undefined) {
+            session.optimize_instructions = params.optimize_instructions;
+        } else if (params.optimizeInstructions !== undefined) {
+            session.optimize_instructions = params.optimizeInstructions;
+        }
+
+        sendEvent('session.update', { session });
+    });
+
+    socket.addEventListener('message', (event) => {
+        if (settled) return;
+        try {
+            const message = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8');
+            const data = JSON.parse(message);
+
+            if (data.type === 'error') {
+                fail(new Error(`Qwen realtime TTS error: ${JSON.stringify(data)}`));
+                return;
+            }
+
+            if (data.type === 'session.updated') {
+                if (sessionUpdated) return;
+                sessionUpdated = true;
+                sendEvent('input_text_buffer.append', { text });
+                sendEvent('input_text_buffer.commit');
+                sendEvent('session.finish');
+                return;
+            }
+
+            if (data.type === 'response.audio.delta' && data.delta) {
+                receivedAudio = true;
+                queue.push(Buffer.from(data.delta, 'base64'));
+                return;
+            }
+
+            if (data.type === 'response.done') {
+                responseDone = true;
+                return;
+            }
+
+            if (data.type === 'session.finished') {
+                sessionFinished = true;
+                finish();
+            }
+        } catch (error) {
+            fail(error);
+        }
+    });
+
+    socket.addEventListener('error', (event) => {
+        fail(new Error(`Qwen realtime TTS websocket error: ${event.message || 'unknown error'}`));
+    });
+
+    socket.addEventListener('close', () => {
+        if (settled) return;
+        if ((responseDone || sessionFinished) && receivedAudio) {
+            finish();
+        } else {
+            fail(new Error('Qwen realtime TTS websocket closed before audio completed.'));
+        }
+    });
+
+    return queue;
+}
+
+async function* streamStandardAudioRequest(text, model, voice, url, params = {}) {
+    const signal = params.signal;
+    throwIfAborted(signal);
+
+    const baseUrl = getTtsBaseUrl(url);
+    const endpoint = `${baseUrl}/services/aigc/multimodal-generation/generation`;
+    const requestBody = {
+        model: model || 'qwen3-tts-flash',
+        input: {
+            text,
+            voice: voice || params.voice || 'Cherry',
+            language_type: params.language_type || params.languageType || inferLanguageType(text),
+        },
+    };
+
+    const generationParams = { ...params };
+    delete generationParams.signal;
+    delete generationParams.voice;
+    delete generationParams.language_type;
+    delete generationParams.languageType;
+    if (Object.keys(generationParams).length > 0) {
+        requestBody.parameters = generationParams;
+    }
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${getKey('QWEN_API_KEY')}`,
+            'Content-Type': 'application/json',
+            'X-DashScope-SSE': 'enable',
+        },
+        body: JSON.stringify(requestBody),
+        signal,
+    });
+
+    if (!response.ok) {
+        throw new Error(`Qwen TTS request failed (${response.status}): ${await response.text()}`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+        const data = await response.json();
+        const audioBase64 = data.output?.audio?.data;
+        if (!audioBase64) {
+            throw new Error(`Qwen TTS did not return audio data: ${JSON.stringify(data)}`);
+        }
+        yield Buffer.from(audioBase64, 'base64');
+        return;
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+        throw new Error('Qwen TTS response body is empty.');
+    }
+
+    const decoder = new TextDecoder();
+    let pending = '';
+
+    const processBlock = async function* (block) {
+        for (const line of block.split(/\r?\n/)) {
+            if (!line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (!payload || payload === '[DONE]') continue;
+
+            const data = JSON.parse(payload);
+            const audioData = data.output?.audio?.data;
+            if (audioData) {
+                yield Buffer.from(audioData, 'base64');
+            }
+        }
+    };
+
+    try {
+        while (true) {
+            throwIfAborted(signal);
+            const { value, done } = await reader.read();
+
+            if (value) {
+                pending += decoder.decode(value, { stream: !done });
+                let boundaryMatch = pending.match(/\r?\n\r?\n/);
+                while (boundaryMatch) {
+                    const boundaryIndex = boundaryMatch.index;
+                    const boundaryLength = boundaryMatch[0].length;
+                    const eventBlock = pending.slice(0, boundaryIndex);
+                    pending = pending.slice(boundaryIndex + boundaryLength);
+                    for await (const chunk of processBlock(eventBlock)) {
+                        yield chunk;
+                    }
+                    boundaryMatch = pending.match(/\r?\n\r?\n/);
+                }
+            }
+
+            if (done) break;
+        }
+
+        if (pending.trim() !== '') {
+            for await (const chunk of processBlock(pending)) {
+                yield chunk;
+            }
+        }
+    } finally {
+        try {
+            reader.releaseLock();
+        } catch {}
+    }
+}
+
+function streamAudioRequest(text, model, voice, url, params = {}) {
+    if (isRealtimeTtsModel(model)) {
+        return streamRealtimeAudioRequest(text, model, voice, url, params);
+    }
+    return streamStandardAudioRequest(text, model, voice, url, params);
+}
+
+const sendAudioRequest = async (text, model, voice, url, params = {}) => {
+    const sampleRate = getOutputSampleRate(params);
+    const pcmBuffer = await collectAudioStream(streamAudioRequest(text, model, voice, url, params));
+    const wavHeader = createWavHeader(pcmBuffer.length, sampleRate, 1, 16);
+    return Buffer.concat([wavHeader, pcmBuffer]).toString('base64');
+};
+
 export const TTSConfig = {
     sendAudioRequest,
+    streamAudioRequest,
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-}
+};

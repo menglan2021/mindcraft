@@ -15,14 +15,24 @@ import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
 import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
-import { speak } from './speak.js';
+import { cancelSpeech, speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
+import { VoiceInputBridge } from '../voice/voice_input_bridge.js';
+
+function isFinitePosition(position) {
+    return position
+        && Number.isFinite(position.x)
+        && Number.isFinite(position.y)
+        && Number.isFinite(position.z);
+}
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
         this.last_sender = null;
         this.count_id = count_id;
         this._disconnectHandled = false;
+        this.last_valid_position = null;
+        this.last_valid_dimension = null;
 
         // Initialize components
         this.actions = new ActionManager(this);
@@ -64,6 +74,7 @@ export class Agent {
 
         console.log(this.name, 'logging into minecraft...');
         this.bot = initBot(this.name);
+        this.voice_input_bridge = new VoiceInputBridge(this, settings);
         
         // Connection Handler
         const onDisconnect = (event, reason) => {
@@ -73,6 +84,7 @@ export class Agent {
             // Log and Analyze
             // handleDisconnection handles logging to console and server
             const { type } = handleDisconnection(this.name, reason);
+            this.voice_input_bridge?.close();
      
             process.exit(1);
         };
@@ -109,7 +121,7 @@ export class Agent {
         this.bot.once('spawn', async () => {
             try {
                 clearTimeout(spawnTimeout);
-                addBrowserViewer(this.bot, count_id);
+                await addBrowserViewer(this.bot, count_id);
                 console.log('Initializing vision intepreter...');
                 this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
 
@@ -120,6 +132,7 @@ export class Agent {
                 this.clearBotLogs();
               
                 this._setupEventHandlers(save_data, init_message);
+                await this.voice_input_bridge.start();
                 this.startEvents();
               
                 if (!load_mem) {
@@ -141,6 +154,14 @@ export class Agent {
                 console.error('Error in spawn event:', error);
                 process.exit(0);
             }
+        });
+
+        this.bot.on('spawn', () => {
+            this.rememberCurrentPosition();
+        });
+
+        this.bot.on('physicsTick', () => {
+            this.rememberCurrentPosition();
         });
     }
 
@@ -236,6 +257,7 @@ export class Agent {
         this.bot.collectBlock.cancelTask();
         this.bot.pathfinder.stop();
         this.bot.pvp.stop();
+        cancelSpeech('Agent 动作被中断，取消当前语音。');
     }
 
     clearBotLogs() {
@@ -249,6 +271,7 @@ export class Agent {
             this.self_prompter.stop(false);
         }
         convoManager.endAllConversations();
+        cancelSpeech('Agent 已静音，取消当前语音。');
     }
 
     async handleMessage(source, message, max_responses=null) {
@@ -421,7 +444,9 @@ export class Agent {
         }
         else {
             if (settings.speak) {
-                speak(to_translate, this.prompter.profile.speak_model);
+                speak(to_translate, this.prompter.profile.speak_model, {
+                    profile: this.prompter.profile,
+                });
             }
             if (settings.chat_ingame) {this.bot.chat(message);}
             sendOutputToServer(this.name, message);
@@ -475,13 +500,15 @@ export class Agent {
         this.bot.on('messagestr', async (message, _, jsonMsg) => {
             if (jsonMsg.translate && jsonMsg.translate.startsWith('death') && message.startsWith(this.name)) {
                 console.log('Agent died: ', message);
-                let death_pos = this.bot.entity.position;
-                this.memory_bank.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
-                let death_pos_text = null;
+                let death_pos = this.getSafePosition();
                 if (death_pos) {
+                    this.memory_bank.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
+                }
+                let death_pos_text = null;
+                if (death_pos && isFinitePosition(death_pos)) {
                     death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.z.toFixed(2)}`;
                 }
-                let dimention = this.bot.game.dimension;
+                let dimention = this.bot.game.dimension || this.last_valid_dimension || 'unknown';
                 this.handleMessage('system', `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`);
             }
         });
@@ -518,6 +545,7 @@ export class Agent {
     }
 
     async update(delta) {
+        this.rememberCurrentPosition();
         await this.bot.modes.update();
         this.self_prompter.update(delta);
         await this.checkTaskDone();
@@ -526,10 +554,42 @@ export class Agent {
     isIdle() {
         return !this.actions.executing;
     }
+
+    rememberCurrentPosition() {
+        const position = this.bot?.entity?.position;
+        if (!isFinitePosition(position)) {
+            return this.last_valid_position;
+        }
+
+        this.last_valid_position = position.clone ? position.clone() : {
+            x: position.x,
+            y: position.y,
+            z: position.z,
+        };
+        this.last_valid_dimension = this.bot?.game?.dimension || this.last_valid_dimension;
+        return this.last_valid_position;
+    }
+
+    getSafePosition() {
+        const position = this.bot?.entity?.position;
+        if (isFinitePosition(position)) {
+            return this.rememberCurrentPosition();
+        }
+        if (!this.last_valid_position) {
+            return null;
+        }
+        return this.last_valid_position.clone ? this.last_valid_position.clone() : {
+            x: this.last_valid_position.x,
+            y: this.last_valid_position.y,
+            z: this.last_valid_position.z,
+        };
+    }
     
 
     cleanKill(msg='Killing agent process...', code=1) {
         this.history.add('system', msg);
+        cancelSpeech('Agent 进程即将退出，取消当前语音。');
+        this.voice_input_bridge?.close();
         this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
         this.history.save();
         process.exit(code);

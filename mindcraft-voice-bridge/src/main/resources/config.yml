@@ -1,0 +1,9 @@
+bridge:
+  host: 127.0.0.1
+  port: 8787
+
+voice:
+  sample_rate: 48000
+  distance: 48.0
+  whispering: false
+  buffer_poll_timeout_ms: 40

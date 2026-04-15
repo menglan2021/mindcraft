@@ -62,6 +62,51 @@ if (process.env.NUM_EXAMPLES) {
 if (process.env.LOG_ALL) {
     settings.log_all_prompts = process.env.LOG_ALL;
 }
+if (process.env.VOICE_OUTPUT_MODE) {
+    settings.voice_output_mode = process.env.VOICE_OUTPUT_MODE;
+}
+if (process.env.VOICE_BRIDGE_HOST) {
+    settings.voice_bridge_host = process.env.VOICE_BRIDGE_HOST;
+}
+if (process.env.VOICE_BRIDGE_PORT) {
+    settings.voice_bridge_port = Number(process.env.VOICE_BRIDGE_PORT);
+}
+if (process.env.VOICE_STREAMING) {
+    settings.voice_streaming = process.env.VOICE_STREAMING !== 'false';
+}
+if (process.env.VOICE_TARGET_SAMPLE_RATE) {
+    settings.voice_target_sample_rate = Number(process.env.VOICE_TARGET_SAMPLE_RATE);
+}
+if (process.env.VOICE_INPUT_ENABLED) {
+    settings.voice_input_enabled = process.env.VOICE_INPUT_ENABLED !== 'false';
+}
+if (process.env.VOICE_INPUT_ECHO_TO_CHAT) {
+    settings.voice_input_echo_to_chat = process.env.VOICE_INPUT_ECHO_TO_CHAT !== 'false';
+}
+if (process.env.VOICE_INPUT_STT_MODEL) {
+    settings.voice_input_stt_model = process.env.VOICE_INPUT_STT_MODEL;
+}
+if (process.env.VOICE_INPUT_STT_URL) {
+    settings.voice_input_stt_url = process.env.VOICE_INPUT_STT_URL;
+}
+if (process.env.VOICE_INPUT_LANGUAGE) {
+    settings.voice_input_language = process.env.VOICE_INPUT_LANGUAGE;
+}
+if (process.env.VOICE_INPUT_PROMPT) {
+    settings.voice_input_prompt = process.env.VOICE_INPUT_PROMPT;
+}
+if (process.env.VOICE_INPUT_END_SILENCE_MS) {
+    settings.voice_input_end_silence_ms = Number(process.env.VOICE_INPUT_END_SILENCE_MS);
+}
+if (process.env.VOICE_INPUT_MIN_DURATION_MS) {
+    settings.voice_input_min_duration_ms = Number(process.env.VOICE_INPUT_MIN_DURATION_MS);
+}
+if (process.env.VOICE_INPUT_MAX_DURATION_MS) {
+    settings.voice_input_max_duration_ms = Number(process.env.VOICE_INPUT_MAX_DURATION_MS);
+}
+if (process.env.VOICE_INPUT_TRIGGER_COOLDOWN_MS) {
+    settings.voice_input_trigger_cooldown_ms = Number(process.env.VOICE_INPUT_TRIGGER_COOLDOWN_MS);
+}
 if (process.env.SETTINGS_JSON) {
     try {
         Object.assign(settings, JSON.parse(process.env.SETTINGS_JSON));

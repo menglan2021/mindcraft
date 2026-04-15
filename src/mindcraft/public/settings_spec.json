@@ -51,6 +51,82 @@
         "description": "Whether to enable text-to-speech reading on the host machine",
         "default": false
     },
+    "voice_output_mode": {
+        "type": "string",
+        "description": "语音输出位置。system：使用操作系统自带朗读；local_player：在当前运行 Mindcraft 的机器本地播放；minecraft_voicechat：发送到 Paper + Simple Voice Chat + mindcraft-voice-bridge，在游戏里播放",
+        "default": "local_player",
+        "options": ["system", "local_player", "minecraft_voicechat"]
+    },
+    "voice_bridge_host": {
+        "type": "string",
+        "description": "仅在 minecraft_voicechat 模式下使用；Paper 语音桥接插件监听地址",
+        "default": "127.0.0.1"
+    },
+    "voice_bridge_port": {
+        "type": "number",
+        "description": "仅在 minecraft_voicechat 模式下使用；Paper 语音桥接插件监听端口",
+        "default": 8787
+    },
+    "voice_streaming": {
+        "type": "boolean",
+        "description": "仅在 minecraft_voicechat 模式下使用；是否优先启用流式音频输出到语音桥接",
+        "default": true
+    },
+    "voice_target_sample_rate": {
+        "type": "number",
+        "description": "仅在 minecraft_voicechat 模式下使用；语音桥接目标采样率，当前建议 48000",
+        "default": 48000
+    },
+    "voice_input_enabled": {
+        "type": "boolean",
+        "description": "是否启用玩家语音输入链路：Simple Voice Chat 语音 -> STT -> bot 消息",
+        "default": false
+    },
+    "voice_input_echo_to_chat": {
+        "type": "boolean",
+        "description": "是否把 STT 转写结果作为系统消息同步显示到游戏聊天栏，供玩家确认识别内容",
+        "default": false
+    },
+    "voice_input_stt_model": {
+        "type": "string",
+        "description": "语音转写模型，例如 qwen/qwen3-asr-flash、openai/gpt-4o-mini-transcribe",
+        "default": "qwen/qwen3-asr-flash"
+    },
+    "voice_input_stt_url": {
+        "type": "string",
+        "description": "语音转写接口地址；留空时使用 provider 默认地址",
+        "default": ""
+    },
+    "voice_input_language": {
+        "type": "string",
+        "description": "语音转写语言，例如 zh、en",
+        "default": "zh"
+    },
+    "voice_input_prompt": {
+        "type": "string",
+        "description": "给 STT 的附加提示，用于约束转写风格，例如“不要翻译，不要加说话人标签”；当前 qwen/qwen3-asr-flash 兼容接口会忽略该字段",
+        "default": "请直接转写玩家语音内容，不要翻译，不要添加说话人标签，不要补充解释。"
+    },
+    "voice_input_end_silence_ms": {
+        "type": "number",
+        "description": "判定一句话结束前需要保持静默的毫秒数，值越大越不容易过早触发",
+        "default": 900
+    },
+    "voice_input_min_duration_ms": {
+        "type": "number",
+        "description": "小于该时长的语音片段会被丢弃，减少误触发",
+        "default": 700
+    },
+    "voice_input_max_duration_ms": {
+        "type": "number",
+        "description": "单次语音片段允许的最长时长，超过会强制触发转写",
+        "default": 15000
+    },
+    "voice_input_trigger_cooldown_ms": {
+        "type": "number",
+        "description": "一次转写完成后重新允许触发的冷却时间，减少连续抖动触发",
+        "default": 500
+    },
     "language": {
         "type": "string",
         "description": "The language to automatically translate to and from using google translate",

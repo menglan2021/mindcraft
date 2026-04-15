@@ -1,5 +1,4 @@
 import { 
-    getPosition,
     getBiomeName,
     getNearbyPlayerNames,
     getInventoryCounts,
@@ -12,11 +11,11 @@ import convoManager from '../conversation.js';
 export function getFullState(agent) {
     const bot = agent.bot;
 
-    const pos = getPosition(bot);
+    const pos = agent.getSafePosition();
     const position = {
-        x: Number(pos.x.toFixed(2)),
-        y: Number(pos.y.toFixed(2)),
-        z: Number(pos.z.toFixed(2))
+        x: pos ? Number(pos.x.toFixed(2)) : null,
+        y: pos ? Number(pos.y.toFixed(2)) : null,
+        z: pos ? Number(pos.z.toFixed(2)) : null
     };
 
     let weather = 'Clear';

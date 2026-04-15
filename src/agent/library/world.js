@@ -1,6 +1,17 @@
 import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
 
+function isFinitePosition(position) {
+    return position
+        && Number.isFinite(position.x)
+        && Number.isFinite(position.y)
+        && Number.isFinite(position.z);
+}
+
+function clonePosition(position) {
+    return position?.clone ? position.clone() : position;
+}
+
 
 export function getNearestFreeSpace(bot, size=1, distance=8) {
     /**
@@ -318,7 +329,15 @@ export function getPosition(bot) {
      * let position = world.getPosition(bot);
      * let x = position.x;
      **/
-    return bot.entity.position;
+    const position = bot?.entity?.position;
+    if (isFinitePosition(position)) {
+        bot._mindcraftLastValidPosition = clonePosition(position);
+        return clonePosition(position);
+    }
+    if (bot?._mindcraftLastValidPosition) {
+        return clonePosition(bot._mindcraftLastValidPosition);
+    }
+    return position;
 }
 
 

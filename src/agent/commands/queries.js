@@ -17,9 +17,12 @@ export const queryList = [
         perform: function (agent) {
             let bot = agent.bot;
             let res = 'STATS';
-            let pos = bot.entity.position;
-            // display position to 2 decimal places
-            res += `\n- Position: x: ${pos.x.toFixed(2)}, y: ${pos.y.toFixed(2)}, z: ${pos.z.toFixed(2)}`;
+            let pos = agent.getSafePosition();
+            if (pos) {
+                res += `\n- Position: x: ${pos.x.toFixed(2)}, y: ${pos.y.toFixed(2)}, z: ${pos.z.toFixed(2)}`;
+            } else {
+                res += '\n- Position: unknown';
+            }
             // Gameplay
             res += `\n- Gamemode: ${bot.game.gameMode}`;
             res += `\n- Health: ${Math.round(bot.health)} / 20`;

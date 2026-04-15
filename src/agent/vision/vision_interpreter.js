@@ -1,15 +1,35 @@
 import { Vec3 } from 'vec3';
-import { Camera } from "./camera.js";
 import fs from 'fs';
 
 export class VisionInterpreter {
     constructor(agent, allow_vision) {
         this.agent = agent;
         this.allow_vision = allow_vision;
-        this.fp = './bots/'+agent.name+'/screenshots/';
+        this.fp = './bots/' + agent.name + '/screenshots/';
+        this.camera = null;
+        this.cameraPromise = null;
         if (allow_vision) {
-            this.camera = new Camera(agent.bot, this.fp);
+            this.cameraPromise = this._createCamera();
         }
+    }
+
+    async _createCamera() {
+        const { Camera } = await import('./camera.js');
+        this.camera = new Camera(this.agent.bot, this.fp);
+        return this.camera;
+    }
+
+    async _getCamera() {
+        if (!this.allow_vision) {
+            return null;
+        }
+        if (this.camera) {
+            return this.camera;
+        }
+        if (!this.cameraPromise) {
+            this.cameraPromise = this._createCamera();
+        }
+        return await this.cameraPromise;
     }
 
     async lookAtPlayer(player_name, direction) {
@@ -27,11 +47,11 @@ export class VisionInterpreter {
         if (direction === 'with') {
             await bot.look(player.yaw, player.pitch);
             result = `Looking in the same direction as ${player_name}\n`;
-            filename = await this.camera.capture();
+            filename = await (await this._getCamera()).capture();
         } else {
             await bot.lookAt(new Vec3(player.position.x, player.position.y + player.height, player.position.z));
             result = `Looking at player ${player_name}\n`;
-            filename = await this.camera.capture();
+            filename = await (await this._getCamera()).capture();
 
         }
 
@@ -47,7 +67,7 @@ export class VisionInterpreter {
         await bot.lookAt(new Vec3(x, y + 2, z));
         result = `Looking at coordinate ${x}, ${y}, ${z}\n`;
 
-        let filename = await this.camera.capture();
+        let filename = await (await this._getCamera()).capture();
 
         return result + `Image analysis: "${await this.analyzeImage(filename)}"`;
     }

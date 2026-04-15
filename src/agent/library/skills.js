@@ -1122,14 +1122,20 @@ function startDoorInterval(bot) {
     if (_doorInterval) {
         clearInterval(_doorInterval);
     }
-    let prev_pos = bot.entity.position.clone();
+    let prev_pos = world.getPosition(bot);
     let prev_check = Date.now();
     let stuck_time = 0;
 
 
     const doorCheckInterval = setInterval(() => {
         const now = Date.now();
-        if (bot.entity.position.distanceTo(prev_pos) >= 0.1) {
+        const currentPos = world.getPosition(bot);
+        if (!currentPos || !prev_pos || typeof currentPos.distanceTo !== 'function') {
+            prev_pos = currentPos || prev_pos;
+            prev_check = now;
+            return;
+        }
+        if (currentPos.distanceTo(prev_pos) >= 0.1) {
             stuck_time = 0;
         } else {
             stuck_time += now - prev_check;
@@ -1138,16 +1144,16 @@ function startDoorInterval(bot) {
         if (stuck_time > 1200) {
             // shuffle positions so we're not always opening the same door
             const positions = [
-                bot.entity.position.clone(),
-                bot.entity.position.offset(0, 0, 1),
-                bot.entity.position.offset(0, 0, -1), 
-                bot.entity.position.offset(1, 0, 0),
-                bot.entity.position.offset(-1, 0, 0),
+                currentPos.clone(),
+                currentPos.offset(0, 0, 1),
+                currentPos.offset(0, 0, -1), 
+                currentPos.offset(1, 0, 0),
+                currentPos.offset(-1, 0, 0),
             ]
             let elevated_positions = positions.map(position => position.offset(0, 1, 0));
             positions.push(...elevated_positions);
-            positions.push(bot.entity.position.offset(0, 2, 0)); // above head
-            positions.push(bot.entity.position.offset(0, -1, 0)); // below feet
+            positions.push(currentPos.offset(0, 2, 0)); // above head
+            positions.push(currentPos.offset(0, -1, 0)); // below feet
             
             let currentIndex = positions.length;
             while (currentIndex != 0) {
@@ -1171,7 +1177,7 @@ function startDoorInterval(bot) {
             }
             stuck_time = 0;
         }
-        prev_pos = bot.entity.position.clone();
+        prev_pos = currentPos.clone();
         prev_check = now;
     }, 200);
     _doorInterval = doorCheckInterval;
@@ -1218,7 +1224,10 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
     try {
         await goToGoal(bot, new pf.goals.GoalNear(x, y, z, min_distance));
         clearInterval(progressInterval);
-        const distance = bot.entity.position.distanceTo(new Vec3(x, y, z));
+        const currentPos = world.getPosition(bot);
+        const distance = currentPos && typeof currentPos.distanceTo === 'function'
+            ? currentPos.distanceTo(new Vec3(x, y, z))
+            : Infinity;
         if (distance <= min_distance+1) {
             log(bot, `You have reached at ${x}, ${y}, ${z}.`);
             return true;
@@ -1403,7 +1412,7 @@ export async function moveAway(bot, distance) {
      * @example
      * await skills.moveAway(bot, 8);
      **/
-    const pos = bot.entity.position;
+    const pos = world.getPosition(bot);
     let goal = new pf.goals.GoalNear(pos.x, pos.y, pos.z, distance);
     let inverted_goal = new pf.goals.GoalInvert(goal);
     bot.pathfinder.setMovements(new pf.Movements(bot));
@@ -1422,8 +1431,10 @@ export async function moveAway(bot, distance) {
     }
 
     await goToGoal(bot, inverted_goal);
-    let new_pos = bot.entity.position;
-    log(bot, `Moved away from ${pos.floored()} to ${new_pos.floored()}.`);
+    let new_pos = world.getPosition(bot);
+    const startText = pos?.floored ? pos.floored() : '(unknown)';
+    const endText = new_pos?.floored ? new_pos.floored() : '(unknown)';
+    log(bot, `Moved away from ${startText} to ${endText}.`);
     return true;
 }
 

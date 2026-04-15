@@ -1,5 +1,12 @@
 .vscode
+.git
 node_modules
 bots/*/
 !bots/*
 keys.json
+.m2
+server_data
+paper-*.jar
+voicechat-bukkit-*.jar
+mindcraft-voice-bridge/target
+deploy/cloud/runtime
