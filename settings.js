@@ -102,6 +102,6 @@ const settings = {
 
     "log_all_prompts": false, // 是否把所有提示词完整写入日志文件
 
-}
+};
 
 export default settings;
