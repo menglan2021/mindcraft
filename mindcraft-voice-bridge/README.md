@@ -17,7 +17,6 @@
 
 - JDK 21
 - Maven 3.9+
-- Node 20（按仓库根目录 `start.sh` 的方式通过 `nvm` 切换）
 
 构建命令：
 
@@ -32,7 +31,7 @@ bash ./build-voicebridge.sh
 mindcraft-voice-bridge/target/mindcraft-voice-bridge-0.1.0.jar
 ```
 
-如果你已经手动切到 `Node 20` 和 `Java 21`，也可以直接执行：
+如果你已经手动切到 `Java 21`，也可以直接执行：
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)

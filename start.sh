@@ -10,9 +10,9 @@ if [ ! -s "$NVM_DIR/nvm.sh" ]; then
   exit 1
 fi
 
-# 加载 nvm 并切换到 README 推荐的 Node 20。
+# 加载 nvm 并切换到当前依赖要求的 Node 22。
 . "$NVM_DIR/nvm.sh"
-nvm use 20 >/dev/null
+nvm use 22 >/dev/null
 
 echo "当前 Node 版本：$(node -v)"
 

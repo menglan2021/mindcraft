@@ -5,12 +5,12 @@
 - `Paper 1.21.6 build 48`
 - `Simple Voice Chat`
 - `mindcraft-voice-bridge`
-- `Mindcraft Node 20`
+- `Mindcraft Node 22`
 
 推荐拓扑：
 
 - `minecraft` 容器：使用官方 `itzg/minecraft-server:java21`
-- `mindcraft` 容器：使用本仓库里的 Node 20 镜像构建
+- `mindcraft` 容器：使用本仓库里的 Node 22 镜像构建
 - 两个容器在同一个 Docker 网络中通信
 - `25565/TCP` 对外提供 Minecraft
 - `24454/UDP` 对外提供 Simple Voice Chat
@@ -27,16 +27,36 @@
 - Minecraft 服务镜像：`itzg/minecraft-server:java21`
 - Simple Voice Chat 插件：`voicechat-bukkit-2.5.32.jar`
 - `mindcraft-voice-bridge`：当前仓库构建产物 `0.1.0`
-- Mindcraft 运行时：`Node 20`
+- Mindcraft 运行时：`Node 22`
 
 部署前请确保云服务器已经具备：
 
 - Docker Engine
 - Docker Compose v2
+- JDK 21 和 Maven，用于在宿主机上构建 `mindcraft-voice-bridge`
 - 可以开放防火墙端口
 - 已经把本仓库上传或 `git clone` 到服务器
 
 如果你的服务器还在使用旧版独立命令 `docker-compose`，本文档里所有 `docker compose` 命令都可以直接替换成 `docker-compose`。
+
+Ubuntu 服务器建议先安装构建依赖：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y openjdk-21-jdk maven
+```
+
+如果你还要在宿主机直接运行 `npm install` 或 `bash ./start.sh`，需要使用 Node 22，并安装 `canvas` / `gl` 这类原生模块的编译依赖：
+
+```bash
+nvm install 22
+nvm use 22
+sudo apt-get install -y build-essential python3 pkg-config \
+  libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev \
+  libgl1-mesa-dev libgles2-mesa-dev libosmesa6-dev libxi-dev libxinerama-dev libxrandr-dev
+```
+
+只构建 `mindcraft-voice-bridge` 插件时不需要安装根项目的 Node 依赖。
 
 本文档默认你仍然使用当前项目里的离线服接入方式：
 

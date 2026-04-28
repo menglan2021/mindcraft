@@ -9,6 +9,7 @@ RUN apt-get update && \
     python3 \
     python-is-python3 \
     python3-pip \
+    pkg-config \
     # tmux \
     xvfb \
     xauth \
@@ -16,6 +17,7 @@ RUN apt-get update && \
     libgles2-mesa-dev \
     libosmesa6-dev \
     build-essential \
+    libpixman-1-dev \
     libcairo2-dev \
     libpango1.0-dev \
     libjpeg-dev \

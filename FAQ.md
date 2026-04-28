@@ -8,14 +8,20 @@
 
 - Many issues are caused by out-of-date node module patches, especially after updates. A catch-all is to delete the `node_modules` folder, and run `npm install`
 
-- **`npm install` fails with Python or C++ build errors**: This typically happens when building native modules like `gl`. Common solutions:
+- **`npm install` fails with Python or C++ build errors**: This typically happens when building native modules like `canvas` or `gl`. Common solutions:
   - **Python not found** (macOS/Linux): If you see `python: command not found`, create a symlink: `sudo ln -s $(which python3) /usr/local/bin/python`
-  - **C++20 errors or Node version issues**: If you see `"C++20 or later required"` errors, you're likely using Node v24 or newer. The `gl` package requires Node LTS (v18 or v20). Switch versions using:
+  - **Node version issues**: Current Mineflayer dependencies require Node 22. Switch versions using:
     ```bash
-    nvm install 20
-    nvm use 20
+    nvm install 22
+    nvm use 22
     rm -rf node_modules package-lock.json
     npm install
+    ```
+  - **Missing Linux native build packages**: On Ubuntu, install the common native dependencies first:
+    ```bash
+    sudo apt-get install -y build-essential python3 pkg-config \
+      libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev \
+      libgl1-mesa-dev libgles2-mesa-dev libosmesa6-dev libxi-dev libxinerama-dev libxrandr-dev
     ```
   - **Skip optional packages**: If you don't need the vision feature (disabled by default), you can skip the problematic `gl` package: `npm install --no-optional`
 

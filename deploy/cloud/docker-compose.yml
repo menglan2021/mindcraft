@@ -67,7 +67,7 @@ services:
     build:
       # 构建上下文使用仓库根目录，便于复制项目代码。
       context: ../..
-      # 使用云部署专用 Dockerfile，运行时固定为 Node 20。
+      # 使用云部署专用 Dockerfile，运行时固定为 Node 22。
       dockerfile: deploy/cloud/mindcraft.Dockerfile
     # 固定容器名，便于日志和重启操作。
     container_name: mindcraft-bot

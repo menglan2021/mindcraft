@@ -2,21 +2,21 @@
     "name": "sanbai_bot",
 
     "model": {
-        "api": "openai",
-        "model": "glm-5",
-        "url": "https://api.sanbai.cloud/v1"
+        "api": "qwen",
+        "model": "qwen3.6-plus",
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     },
 
     "code_model": {
-        "api": "openai",
-        "model": "glm-5",
-        "url": "https://api.sanbai.cloud/v1"
+        "api": "qwen",
+        "model": "qwen3.6-plus",
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     },
 
     "vision_model": {
-        "api": "openai",
-        "model": "gpt-5.4",
-        "url": "https://api.sanbai.cloud/v1"
+        "api": "qwen",
+        "model": "qwen3.6-plus",
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     },
 
     "embedding": {
