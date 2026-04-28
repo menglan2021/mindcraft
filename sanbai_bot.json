@@ -33,7 +33,8 @@
         "params": {
             "language_type": "Chinese",
             "instructions": "用自然、清晰、偏口语的中文语气说话，语速稍快一些。",
-            "optimize_instructions": true
+            "optimize_instructions": true,
+            "first_audio_timeout_ms": 30000
         }
     },
 
