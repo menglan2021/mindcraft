@@ -295,6 +295,22 @@ export class Agent {
             max_responses = Infinity;
         }
 
+        const previousDeferMemorySummaries = this.deferMemorySummaries;
+        this.deferMemorySummaries = true;
+        let memorySummaryFlushed = false;
+        const flushDeferredMemorySummaries = async () => {
+            if (memorySummaryFlushed) return;
+            memorySummaryFlushed = true;
+            this.deferMemorySummaries = previousDeferMemorySummaries;
+            if (!previousDeferMemorySummaries && this.history.hasPendingSummaries()) {
+                if (settings.voice_output_priority) {
+                    await waitForSpeechIdle();
+                }
+                await this.history.flushPendingSummaries();
+                await this.history.save();
+            }
+        };
+
         const self_prompt = source === 'system' || source === this.name;
         const from_other_bot = convoManager.isOtherAgent(source);
 
@@ -303,6 +319,7 @@ export class Agent {
             if (user_command_name) {
                 if (!commandExists(user_command_name)) {
                     await this.routeResponse(source, `Command '${user_command_name}' does not exist.`);
+                    await flushDeferredMemorySummaries();
                     return false;
                 }
                 await this.routeResponse(source, `*${source} used ${user_command_name.substring(1)}*`);
@@ -314,6 +331,7 @@ export class Agent {
                 let execute_res = await executeCommand(this, message);
                 if (execute_res) 
                     await this.routeResponse(source, execute_res);
+                await flushDeferredMemorySummaries();
                 return true;
             }
         }
@@ -407,6 +425,7 @@ export class Agent {
             this.history.save();
         }
 
+        await flushDeferredMemorySummaries();
         return used_command;
     }
 

@@ -24,6 +24,7 @@ export class History {
         this.summary_chunk_size = 5; 
         // chunking reduces expensive calls to promptMemSaving and appendFullHistory
         // and improves the quality of the memory summary
+        this.pending_summary_chunks = [];
     }
 
     getHistory() { // expects an Examples object
@@ -58,6 +59,26 @@ export class History {
         }
     }
 
+    hasPendingSummaries() {
+        return this.pending_summary_chunks.length > 0;
+    }
+
+    async storeMemoryChunk(chunk) {
+        try {
+            await this.summarizeMemories(chunk);
+            await this.appendFullHistory(chunk);
+        } catch (error) {
+            console.error('Failed to summarize memories:', error);
+        }
+    }
+
+    async flushPendingSummaries() {
+        while (this.pending_summary_chunks.length > 0) {
+            const chunk = this.pending_summary_chunks.shift();
+            await this.storeMemoryChunk(chunk);
+        }
+    }
+
     async add(name, content) {
         let role = 'assistant';
         if (name === 'system') {
@@ -74,8 +95,12 @@ export class History {
             while (this.turns.length > 0 && this.turns[0].role === 'assistant')
                 chunk.push(this.turns.shift()); // remove until turns starts with system/user message
 
-            await this.summarizeMemories(chunk);
-            await this.appendFullHistory(chunk);
+            if (this.agent.deferMemorySummaries) {
+                this.pending_summary_chunks.push(chunk);
+            }
+            else {
+                await this.storeMemoryChunk(chunk);
+            }
         }
     }
 
