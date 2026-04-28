@@ -48,18 +48,36 @@ export class Examples {
             return [];
 
         let turn_text = this.turnsToText(turns);
-        if (this.model !== null) {
-            let embedding = await this.model.embed(turn_text);
-            this.examples.sort((a, b) => 
-                cosineSimilarity(embedding, this.embeddings[this.turnsToText(b)]) -
-                cosineSimilarity(embedding, this.embeddings[this.turnsToText(a)])
-            );
-        }
-        else {
+        const sortByWordOverlap = () => {
             this.examples.sort((a, b) => 
                 wordOverlapScore(turn_text, this.turnsToText(b)) -
                 wordOverlapScore(turn_text, this.turnsToText(a))
             );
+        };
+
+        if (this.model !== null) {
+            try {
+                if (turn_text.length === 0) {
+                    throw new Error('Empty text cannot be embedded.');
+                }
+                let embedding = await this.model.embed(turn_text);
+                this.examples.sort((a, b) => {
+                    const bEmbedding = this.embeddings[this.turnsToText(b)];
+                    const aEmbedding = this.embeddings[this.turnsToText(a)];
+                    if (!bEmbedding || !aEmbedding) {
+                        return 0;
+                    }
+                    return cosineSimilarity(embedding, bEmbedding) -
+                        cosineSimilarity(embedding, aEmbedding);
+                });
+            } catch (err) {
+                console.warn('Error with embedding model during example selection, using word-overlap instead.', err?.message || err);
+                this.model = null;
+                sortByWordOverlap();
+            }
+        }
+        else {
+            sortByWordOverlap();
         }
         let selected = this.examples.slice(0, this.select_num);
         return JSON.parse(JSON.stringify(selected)); // deep copy
