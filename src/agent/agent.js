@@ -443,23 +443,25 @@ export class Agent {
         // newlines are interpreted as separate chats, which triggers spam filters. replace them with spaces
         message = message.replaceAll('\n', ' ');
 
+        let speechPromise = null;
+        if (settings.speak) {
+            speechPromise = speak(to_translate, this.prompter.profile.speak_model, {
+                profile: this.prompter.profile,
+            });
+        }
+
         if (settings.only_chat_with.length > 0) {
             for (let username of settings.only_chat_with) {
                 this.bot.whisper(username, message);
             }
         }
         else {
-            let speechPromise = null;
-            if (settings.speak) {
-                speechPromise = speak(to_translate, this.prompter.profile.speak_model, {
-                    profile: this.prompter.profile,
-                });
-            }
             if (settings.chat_ingame) {this.bot.chat(message);}
-            sendOutputToServer(this.name, message);
-            if (settings.voice_output_priority && speechPromise) {
-                await speechPromise;
-            }
+        }
+
+        sendOutputToServer(this.name, message);
+        if (settings.voice_output_priority && speechPromise) {
+            await speechPromise;
         }
     }
 
