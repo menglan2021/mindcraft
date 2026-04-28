@@ -236,6 +236,8 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     let responseDone = false;
     let sessionFinished = false;
     let receivedAudio = false;
+    let firstAudioTimer = null;
+    const firstAudioTimeoutMs = Number(params.first_audio_timeout_ms || params.firstAudioTimeoutMs || 20000);
 
     const closeSocket = () => {
         if (socket && (socket.readyState === 0 || socket.readyState === 1)) {
@@ -246,9 +248,20 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     };
 
     const cleanup = () => {
+        if (firstAudioTimer) {
+            clearTimeout(firstAudioTimer);
+            firstAudioTimer = null;
+        }
         if (signal && abortHandler) {
             signal.removeEventListener('abort', abortHandler);
         }
+    };
+
+    const startFirstAudioTimer = () => {
+        if (!Number.isFinite(firstAudioTimeoutMs) || firstAudioTimeoutMs <= 0) return;
+        firstAudioTimer = setTimeout(() => {
+            fail(new Error(`Qwen realtime TTS timed out before first audio chunk after ${firstAudioTimeoutMs}ms.`));
+        }, firstAudioTimeoutMs);
     };
 
     const fail = (error) => {
@@ -289,11 +302,12 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
 
     socket = new UndiciWebSocket(wsUrl, {
         headers: {
-            Authorization: `bearer ${getKey('QWEN_API_KEY')}`,
+            Authorization: `Bearer ${getKey('QWEN_API_KEY')}`,
         },
     });
 
     socket.addEventListener('open', () => {
+        startFirstAudioTimer();
         const session = {
             voice: voice || params.voice || 'Cherry',
             mode: params.mode || 'commit',
@@ -335,6 +349,10 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
             }
 
             if (data.type === 'response.audio.delta' && data.delta) {
+                if (!receivedAudio && firstAudioTimer) {
+                    clearTimeout(firstAudioTimer);
+                    firstAudioTimer = null;
+                }
                 receivedAudio = true;
                 queue.push(Buffer.from(data.delta, 'base64'));
                 return;

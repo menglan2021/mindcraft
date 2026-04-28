@@ -80,6 +80,9 @@ if (process.env.VOICE_STREAMING) {
 if (process.env.VOICE_TARGET_SAMPLE_RATE) {
     settings.voice_target_sample_rate = Number(process.env.VOICE_TARGET_SAMPLE_RATE);
 }
+if (process.env.VOICE_OUTPUT_PRIORITY) {
+    settings.voice_output_priority = process.env.VOICE_OUTPUT_PRIORITY !== 'false';
+}
 if (process.env.VOICE_INPUT_ENABLED) {
     settings.voice_input_enabled = process.env.VOICE_INPUT_ENABLED !== 'false';
 }

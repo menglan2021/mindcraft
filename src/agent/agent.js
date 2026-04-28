@@ -15,7 +15,7 @@ import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
 import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
-import { cancelSpeech, speak } from './speak.js';
+import { cancelSpeech, speak, waitForSpeechIdle } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { VoiceInputBridge } from '../voice/voice_input_bridge.js';
 
@@ -26,11 +26,17 @@ function isFinitePosition(position) {
         && Number.isFinite(position.z);
 }
 
+function isPartialReadError(error) {
+    const text = error instanceof Error ? `${error.name}\n${error.message}\n${error.stack || ''}` : String(error);
+    return text.includes('PartialReadError');
+}
+
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
         this.last_sender = null;
         this.count_id = count_id;
         this._disconnectHandled = false;
+        this._cleaningUp = false;
         this.last_valid_position = null;
         this.last_valid_dimension = null;
 
@@ -83,16 +89,17 @@ export class Agent {
 
             // Log and Analyze
             // handleDisconnection handles logging to console and server
-            const { type } = handleDisconnection(this.name, reason);
-            this.voice_input_bridge?.close();
-     
-            process.exit(1);
+            const { msg } = handleDisconnection(this.name, reason);
+            this.cleanKill(msg, 1);
         };
         
         // Bind events
         this.bot.once('kicked', (reason) => onDisconnect('Kicked', reason));
         this.bot.once('end', (reason) => onDisconnect('Disconnected', reason));
         this.bot.on('error', (err) => {
+            if (isPartialReadError(err)) {
+                return;
+            }
             if (String(err).includes('Duplicate') || String(err).includes('ECONNREFUSED')) {
                  onDisconnect('Error', err);
             } else {
@@ -116,7 +123,7 @@ export class Agent {
         const spawnTimeout = setTimeout(() => {
             const msg = `Bot has not spawned after ${spawnTimeoutDuration} seconds. Exiting.`;
             log(this.name, msg);
-            process.exit(1);
+            this.cleanKill(msg, 1);
         }, spawnTimeoutDuration * 1000);
         this.bot.once('spawn', async () => {
             try {
@@ -152,7 +159,7 @@ export class Agent {
 
             } catch (error) {
                 console.error('Error in spawn event:', error);
-                process.exit(0);
+                this.cleanKill('Error in spawn event. Exiting.', 0);
             }
         });
 
@@ -257,7 +264,6 @@ export class Agent {
         this.bot.collectBlock.cancelTask();
         this.bot.pathfinder.stop();
         this.bot.pvp.stop();
-        cancelSpeech('Agent 动作被中断，取消当前语音。');
     }
 
     clearBotLogs() {
@@ -296,10 +302,10 @@ export class Agent {
             const user_command_name = containsCommand(message);
             if (user_command_name) {
                 if (!commandExists(user_command_name)) {
-                    this.routeResponse(source, `Command '${user_command_name}' does not exist.`);
+                    await this.routeResponse(source, `Command '${user_command_name}' does not exist.`);
                     return false;
                 }
-                this.routeResponse(source, `*${source} used ${user_command_name.substring(1)}*`);
+                await this.routeResponse(source, `*${source} used ${user_command_name.substring(1)}*`);
                 if (user_command_name === '!newAction') {
                     // all user-initiated commands are ignored by the bot except for this one
                     // add the preceding message to the history to give context for newAction
@@ -307,7 +313,7 @@ export class Agent {
                 }
                 let execute_res = await executeCommand(this, message);
                 if (execute_res) 
-                    this.routeResponse(source, execute_res);
+                    await this.routeResponse(source, execute_res);
                 return true;
             }
         }
@@ -365,7 +371,7 @@ export class Agent {
                 this.self_prompter.handleUserPromptedCmd(self_prompt, isAction(command_name));
 
                 if (settings.show_command_syntax === "full") {
-                    this.routeResponse(source, res);
+                    await this.routeResponse(source, res);
                 }
                 else if (settings.show_command_syntax === "shortened") {
                     // show only "used !commandname"
@@ -373,13 +379,13 @@ export class Agent {
                     let chat_message = `*used ${command_name.substring(1)}*`;
                     if (pre_message.length > 0)
                         chat_message = `${pre_message}  ${chat_message}`;
-                    this.routeResponse(source, chat_message);
+                    await this.routeResponse(source, chat_message);
                 }
                 else {
                     // no command at all
                     let pre_message = res.substring(0, res.indexOf(command_name)).trim();
                     if (pre_message.trim().length > 0)
-                        this.routeResponse(source, pre_message);
+                        await this.routeResponse(source, pre_message);
                 }
 
                 let execute_res = await executeCommand(this, res);
@@ -394,7 +400,7 @@ export class Agent {
             }
             else { // conversation response
                 this.history.add(this.name, res);
-                this.routeResponse(source, res);
+                await this.routeResponse(source, res);
                 break;
             }
             
@@ -419,7 +425,7 @@ export class Agent {
         }
         else {
             // otherwise, use open chat
-            this.openChat(message);
+            await this.openChat(message);
             // note that to_player could be another bot, but if we get here the conversation has ended
         }
     }
@@ -443,13 +449,17 @@ export class Agent {
             }
         }
         else {
+            let speechPromise = null;
             if (settings.speak) {
-                speak(to_translate, this.prompter.profile.speak_model, {
+                speechPromise = speak(to_translate, this.prompter.profile.speak_model, {
                     profile: this.prompter.profile,
                 });
             }
             if (settings.chat_ingame) {this.bot.chat(message);}
             sendOutputToServer(this.name, message);
+            if (settings.voice_output_priority && speechPromise) {
+                await speechPromise;
+            }
         }
     }
 
@@ -478,6 +488,9 @@ export class Agent {
         });
         // Logging callbacks
         this.bot.on('error' , (err) => {
+            if (isPartialReadError(err)) {
+                return;
+            }
             console.error('Error event!', err);
         });
         // Use connection handler for runtime disconnects
@@ -586,12 +599,43 @@ export class Agent {
     }
     
 
-    cleanKill(msg='Killing agent process...', code=1) {
-        this.history.add('system', msg);
-        cancelSpeech('Agent 进程即将退出，取消当前语音。');
-        this.voice_input_bridge?.close();
-        this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
-        this.history.save();
+    async cleanKill(msg='Killing agent process...', code=1) {
+        if (this._cleaningUp) return;
+        this._cleaningUp = true;
+
+        try {
+            await this.history?.add?.('system', msg);
+        } catch (error) {
+            console.error('Failed to append shutdown message to history:', error);
+        }
+
+        try {
+            this.voice_input_bridge?.close();
+        } catch (error) {
+            console.error('Failed to close voice input bridge:', error);
+        }
+
+        try {
+            this.bot?.chat?.(code > 1 ? 'Restarting.' : 'Exiting.');
+        } catch (error) {
+            console.warn('Could not send shutdown chat message:', error.message || error);
+        }
+
+        try {
+            await this.history?.save?.();
+        } catch (error) {
+            console.error('Failed to save history before shutdown:', error);
+        }
+
+        if (settings.voice_output_priority) {
+            console.log('[TTS] waiting for speech output before process exit...');
+            try {
+                await waitForSpeechIdle();
+            } catch (error) {
+                console.error('[TTS] failed while waiting for speech output before exit:', error);
+            }
+        }
+
         process.exit(code);
     }
     async checkTaskDone() {

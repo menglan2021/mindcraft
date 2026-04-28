@@ -94,9 +94,11 @@ services:
       # 语音桥接插件监听的 WebSocket 端口。
       VOICE_BRIDGE_PORT: "8787"
       # 开启流式推送，缩短 bot 开口的首包延迟。
-      VOICE_STREAMING: "true"
+      VOICE_STREAMING: "${VOICE_STREAMING:-true}"
       # 插件当前只接受 48kHz 单声道 PCM。
       VOICE_TARGET_SAMPLE_RATE: "48000"
+      # 优先保证语音输出完成，再执行同条回复里的动作命令。
+      VOICE_OUTPUT_PRIORITY: "${VOICE_OUTPUT_PRIORITY:-true}"
       # 是否开启玩家语音上行到 STT，再送入 bot。
       VOICE_INPUT_ENABLED: "${VOICE_INPUT_ENABLED:-true}"
       # 是否把 STT 结果显示到游戏聊天栏，但不会再次触发 bot。

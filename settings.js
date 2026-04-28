@@ -52,6 +52,7 @@ const settings = {
     "voice_bridge_port": 8787, // 仅在 minecraft_voicechat 模式下使用；Paper 语音桥接插件监听端口
     "voice_streaming": true, // 仅在 minecraft_voicechat 模式下使用；是否优先按流式分片把音频推给桥接插件
     "voice_target_sample_rate": 48000, // 仅在 minecraft_voicechat 模式下使用；桥接目标采样率，当前建议固定为 48000
+    "voice_output_priority": true, // 开启后，带命令的回复会先完成语音输出，再执行命令，避免动作中断取消刚开始的 TTS
     // 是否启用“玩家语音 -> STT -> bot 消息”的上行链路。
     // 开启后，Paper 侧 mindcraft-voice-bridge 会接收玩家的 Simple Voice Chat 语音，
     // 按一句话切段后发给 Mindcraft，再由 STT 转写成文字并作为该玩家的消息送给 bot。

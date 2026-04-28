@@ -37,18 +37,39 @@ const argv = yargs(args)
     })
     .argv;
 
+let activeAgent = null;
+let shuttingDown = false;
+
+function handleShutdownSignal(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    if (activeAgent) {
+        activeAgent.cleanKill(`Agent process received ${signal}. Exiting after speech output.`, 0);
+        return;
+    }
+    process.exit(0);
+}
+
+process.once('SIGINT', () => handleShutdownSignal('SIGINT'));
+process.once('SIGTERM', () => handleShutdownSignal('SIGTERM'));
+
 (async () => {
     try {
         console.log('Connecting to MindServer');
         await serverProxy.connect(argv.name, argv.port);
         console.log('Starting agent');
         const agent = new Agent();
+        activeAgent = agent;
         serverProxy.setAgent(agent);
         await agent.start(argv.load_memory, argv.init_message, argv.count_id);
     } catch (error) {
         console.error('Failed to start agent process:');
         console.error(error.message);
         console.error(error.stack);
+        if (activeAgent) {
+            activeAgent.cleanKill('Failed to start agent process.', 1);
+            return;
+        }
         process.exit(1);
     }
 })();

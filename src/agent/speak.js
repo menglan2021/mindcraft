@@ -369,6 +369,7 @@ async function playMinecraftVoiceChat(text, model, options, signal) {
         channels: bridgeConfig.channels,
     });
     console.log(`[TTS] bridge start utteranceId=${utteranceId} bot=${bridgeConfig.botEntityName}`);
+    console.log(`[TTS] requesting audio provider=${resolved.provider} model=${resolved.modelName || 'default'} streaming=${bridgeConfig.streaming}`);
 
     const linkedAbort = createLinkedAbortController(signal);
 
@@ -433,19 +434,24 @@ async function performSpeech(text, model, options, signal) {
 
 export function speak(text, speakModel, options = {}) {
     if (!text || text.trim() === '') {
-        return;
+        return Promise.resolve(null);
     }
 
     const model = speakModel || 'system';
-    speakingQueue.enqueue(async ({ signal }) => {
+    return speakingQueue.enqueue(async ({ signal }) => {
         await performSpeech(text, model, options, signal);
     }).catch((error) => {
         if (!isAbortError(error)) {
             console.error('[TTS] speech failed', error);
         }
+        return null;
     });
 }
 
 export function cancelSpeech(message = '语音播放已取消。') {
     speakingQueue.cancelAll(message);
+}
+
+export async function waitForSpeechIdle() {
+    await speakingQueue.waitForIdle();
 }
