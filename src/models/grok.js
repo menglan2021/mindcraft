@@ -1,13 +1,14 @@
 import OpenAIApi from 'openai';
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 // xAI doesn't supply a SDK for their models, but fully supports OpenAI and Anthropic SDKs
 export class Grok {
     static prefix = 'xai';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
         this.url = url;
-        this.params = params;
+        this.params = sanitizeRequestParams(params);
 
         let config = {};
         if (url)
@@ -15,7 +16,7 @@ export class Grok {
         else
             config.baseURL = "https://api.x.ai/v1"
 
-        config.apiKey = getKey('XAI_API_KEY');
+        config.apiKey = getKey(resolveKeyName(params, keyName, 'XAI_API_KEY'));
 
         this.openai = new OpenAIApi(config);
     }
@@ -77,6 +78,5 @@ export class Grok {
         throw new Error('Embeddings are not supported by Grok.');
     }
 }
-
 
 

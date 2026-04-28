@@ -1,18 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { strictFormat } from '../utils/text.js';
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class Claude {
     static prefix = 'anthropic';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
-        this.params = params || {};
+        this.params = sanitizeRequestParams(params);
 
         let config = {};
         if (url)
             config.baseURL = url;
         
-        config.apiKey = getKey('ANTHROPIC_API_KEY');
+        config.apiKey = getKey(resolveKeyName(params, keyName, 'ANTHROPIC_API_KEY'));
 
         this.anthropic = new Anthropic(config);
     }

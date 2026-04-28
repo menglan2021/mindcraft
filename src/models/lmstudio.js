@@ -1,11 +1,12 @@
 import OpenAIApi from 'openai';
 import { strictFormat } from '../utils/text.js';
+import { sanitizeRequestParams } from './_model_utils.js';
 
 export class LMStudio {
     static prefix = 'lmstudio';
     constructor(model_name, url, params) {
         this.model_name = model_name;
-        this.params = params;
+        this.params = sanitizeRequestParams(params);
         this.openai = new OpenAIApi({
             baseURL: url || 'http://localhost:1234/v1',
             apiKey: 'lm-studio', // LM Studio ignores this but the client requires a non-empty value

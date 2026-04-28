@@ -1,21 +1,22 @@
 import Replicate from 'replicate';
 import { toSinglePrompt } from '../utils/text.js';
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 // llama, mistral
 export class ReplicateAPI {
 	static prefix = 'replicate';
-	constructor(model_name, url, params) {
+	constructor(model_name, url, params, keyName) {
 		this.model_name = model_name;
 		this.url = url;
-		this.params = params;
+		this.params = sanitizeRequestParams(params);
 
 		if (this.url) {
 			console.warn('Replicate API does not support custom URLs. Ignoring provided URL.');
 		}
 
 		this.replicate = new Replicate({
-			auth: getKey('REPLICATE_API_KEY'),
+			auth: getKey(resolveKeyName(params, keyName, 'REPLICATE_API_KEY')),
 		});
 	}
 

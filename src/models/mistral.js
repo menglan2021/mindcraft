@@ -1,27 +1,29 @@
 import { Mistral as MistralClient } from '@mistralai/mistralai';
 import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class Mistral {
     static prefix = 'mistral';
     #client;
 
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
-        this.params = params;
+        this.params = sanitizeRequestParams(params);
+        const apiKey = getKey(resolveKeyName(params, keyName, "MISTRAL_API_KEY"));
 
         if (typeof url === "string") {
             console.warn("Mistral does not support custom URL's, ignoring!");
 
         }
 
-        if (!getKey("MISTRAL_API_KEY")) {
+        if (!apiKey) {
             throw new Error("Mistral API Key missing, make sure to set MISTRAL_API_KEY in settings.json")
         }
 
         this.#client = new MistralClient(
             {
-                apiKey: getKey("MISTRAL_API_KEY")
+                apiKey
             }
         );
 

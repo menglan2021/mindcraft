@@ -1,13 +1,15 @@
 import OpenAIApi from 'openai';
 import { getKey, hasKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class GPT {
     static prefix = 'openai';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
         this.params = params;
         this.url = url; // store so that we know whether a custom URL has been set
+        this.keyName = resolveKeyName(params, keyName, 'OPENAI_API_KEY');
 
         let config = {};
         if (url)
@@ -16,7 +18,7 @@ export class GPT {
         if (hasKey('OPENAI_ORG_ID'))
             config.organization = getKey('OPENAI_ORG_ID');
 
-        config.apiKey = getKey('OPENAI_API_KEY');
+        config.apiKey = getKey(this.keyName);
 
         this.openai = new OpenAIApi(config);
     }
@@ -42,7 +44,7 @@ export class GPT {
                     model: model,
                     messages,
                     stop: stop_seq,
-                    ...(this.params || {})
+                    ...sanitizeRequestParams(this.params)
                 };
                 if (model.includes('o1') || model.includes('o3') || model.includes('5')) {
                     delete pack.stop;
@@ -64,7 +66,7 @@ export class GPT {
                     model: model,
                     instructions: systemMessage,
                     input: messages,
-                    ...(this.params || {})
+                    ...sanitizeRequestParams(this.params)
                 });
                 console.log('Received.');
                 res = response.output_text;
@@ -116,7 +118,7 @@ export class GPT {
 
 }
 
-const sendAudioRequest = async (text, model, voice, url) => {
+const sendAudioRequest = async (text, model, voice, url, params = {}) => {
     const payload = {
         model: model,
         voice: voice,
@@ -131,7 +133,7 @@ const sendAudioRequest = async (text, model, voice, url) => {
     if (hasKey('OPENAI_ORG_ID'))
         config.organization = getKey('OPENAI_ORG_ID');
 
-    config.apiKey = getKey('OPENAI_API_KEY');
+    config.apiKey = getKey(resolveKeyName(params, null, 'OPENAI_API_KEY'));
 
     const openai = new OpenAIApi(config);
 

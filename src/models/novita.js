@@ -1,20 +1,21 @@
 import OpenAIApi from 'openai';
 import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 // llama, mistral
 export class Novita {
 	static prefix = 'novita';
-	constructor(model_name, url, params) {
+	constructor(model_name, url, params, keyName) {
     this.model_name = model_name;
     this.url = url || 'https://api.novita.ai/v3/openai';
-    this.params = params;
+    this.params = sanitizeRequestParams(params);
 
 
     let config = {
       baseURL: this.url
     };
-    config.apiKey = getKey('NOVITA_API_KEY');
+    config.apiKey = getKey(resolveKeyName(params, keyName, 'NOVITA_API_KEY'));
 
     this.openai = new OpenAIApi(config);
   }

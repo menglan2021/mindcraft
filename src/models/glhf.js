@@ -1,11 +1,13 @@
 import OpenAIApi from 'openai';
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class GLHF {
     static prefix = 'glhf';
-    constructor(model_name, url) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
-        const apiKey = getKey('GHLF_API_KEY');
+        this.params = sanitizeRequestParams(params);
+        const apiKey = getKey(resolveKeyName(params, keyName, 'GHLF_API_KEY'));
         if (!apiKey) {
             throw new Error('API key not found. Please check keys.json and ensure GHLF_API_KEY is defined.');
         }
@@ -21,7 +23,8 @@ export class GLHF {
         const pack = {
             model: this.model_name || "hf:meta-llama/Llama-3.3-70B-Instruct",
             messages,
-            stop: [stop_seq]
+            stop: [stop_seq],
+            ...(this.params || {})
         };
 
         const maxAttempts = 5;

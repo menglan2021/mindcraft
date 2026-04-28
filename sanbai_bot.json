@@ -3,20 +3,23 @@
 
     "model": {
         "api": "qwen",
-        "model": "qwen3.6-plus",
-        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        "model": "qwen3.6-flash",
+        "url": "https://api.sanbai.cloud/v1",
+        "key_name": "QWEN_CHAT_API_KEY"
     },
 
     "code_model": {
         "api": "qwen",
-        "model": "qwen3.6-plus",
-        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        "model": "qwen3.6-flash",
+        "url": "https://api.sanbai.cloud/v1",
+        "key_name": "QWEN_CHAT_API_KEY"
     },
 
     "vision_model": {
         "api": "qwen",
-        "model": "qwen3.6-plus",
-        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        "model": "qwen3.6-flash",
+        "url": "https://api.sanbai.cloud/v1",
+        "key_name": "QWEN_CHAT_API_KEY"
     },
 
     "embedding": {

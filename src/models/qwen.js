@@ -3,15 +3,17 @@ import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 import { randomUUID } from 'crypto';
 import { WebSocket as UndiciWebSocket } from 'undici';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class Qwen {
     static prefix = 'qwen';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
         this.params = params;
+        this.keyName = resolveKeyName(params, keyName, 'QWEN_API_KEY');
         const config = {
             baseURL: url || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-            apiKey: getKey('QWEN_API_KEY'),
+            apiKey: getKey(this.keyName),
         };
 
         this.openai = new OpenAIApi(config);
@@ -26,7 +28,7 @@ export class Qwen {
             model: this.model_name || 'qwen-plus',
             messages,
             stop: stop_seq,
-            ...(this.params || {}),
+            ...sanitizeRequestParams(this.params),
         };
 
         let res = null;
@@ -189,6 +191,10 @@ function getOutputSampleRate(params = {}) {
     return params.sample_rate || params.sampleRate || 24000;
 }
 
+function getQwenKey(params = {}) {
+    return getKey(resolveKeyName(params, null, 'QWEN_API_KEY'));
+}
+
 function createWavHeader(dataLength, sampleRate, channels, bitsPerSample) {
     const header = Buffer.alloc(44);
     const byteRate = sampleRate * channels * bitsPerSample / 8;
@@ -303,7 +309,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
 
     socket = new UndiciWebSocket(wsUrl, {
         headers: {
-            Authorization: `Bearer ${getKey('QWEN_API_KEY')}`,
+            Authorization: `Bearer ${getQwenKey(params)}`,
         },
     });
 
@@ -409,6 +415,8 @@ async function* streamStandardAudioRequest(text, model, voice, url, params = {})
     delete generationParams.voice;
     delete generationParams.language_type;
     delete generationParams.languageType;
+    delete generationParams.key_name;
+    delete generationParams.keyName;
     if (Object.keys(generationParams).length > 0) {
         requestBody.parameters = generationParams;
     }
@@ -416,7 +424,7 @@ async function* streamStandardAudioRequest(text, model, voice, url, params = {})
     const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
-            Authorization: `Bearer ${getKey('QWEN_API_KEY')}`,
+            Authorization: `Bearer ${getQwenKey(params)}`,
             'Content-Type': 'application/json',
             'X-DashScope-SSE': 'enable',
         },

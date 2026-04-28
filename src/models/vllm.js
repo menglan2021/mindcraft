@@ -2,13 +2,15 @@
 // Qwen is also compatible with the OpenAI API format;
 
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class VLLM {
     static prefix = 'vllm';
-    constructor(model_name, url) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
+        this.params = sanitizeRequestParams(params);
 
         // Currently use self-hosted SGLang API for text generation; use OpenAI text-embedding-3-small model for simple embedding.
         let vllm_config = {};
@@ -17,7 +19,8 @@ export class VLLM {
         else
             vllm_config.baseURL = 'http://0.0.0.0:8000/v1';
 
-        vllm_config.apiKey = ""
+        const resolvedKeyName = resolveKeyName(params, keyName);
+        vllm_config.apiKey = resolvedKeyName ? getKey(resolvedKeyName) : "";
 
         this.vllm = new OpenAIApi(vllm_config);
     }
@@ -34,6 +37,7 @@ export class VLLM {
             model: model,
             messages,
             stop: stop_seq,
+            ...(this.params || {})
         };
 
         let res = null;

@@ -1,10 +1,11 @@
 import { strictFormat } from '../utils/text.js';
+import { sanitizeRequestParams } from './_model_utils.js';
 
 export class Ollama {
     static prefix = 'ollama';
     constructor(model_name, url, params) {
         this.model_name = model_name;
-        this.params = params;
+        this.params = sanitizeRequestParams(params);
         this.url = url || 'http://127.0.0.1:11434';
         this.chat_endpoint = '/api/chat';
         this.embedding_endpoint = '/api/embeddings';

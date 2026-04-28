@@ -1,17 +1,18 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class DeepSeek {
     static prefix = 'deepseek';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
-        this.params = params;
+        this.params = sanitizeRequestParams(params);
 
         let config = {};
 
         config.baseURL = url || 'https://api.deepseek.com';
-        config.apiKey = getKey('DEEPSEEK_API_KEY');
+        config.apiKey = getKey(resolveKeyName(params, keyName, 'DEEPSEEK_API_KEY'));
 
         this.openai = new OpenAIApi(config);
     }
@@ -54,6 +55,5 @@ export class DeepSeek {
         throw new Error('Embeddings are not supported by Deepseek.');
     }
 }
-
 
 

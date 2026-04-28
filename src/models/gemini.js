@@ -1,13 +1,15 @@
 import { GoogleGenAI } from '@google/genai';
 import { strictFormat } from '../utils/text.js';
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 
 export class Gemini {
     static prefix = 'google';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
         this.params = params;
+        this.keyName = resolveKeyName(params, keyName, 'GEMINI_API_KEY');
         this.safetySettings = [
             {
                 "category": "HARM_CATEGORY_DANGEROUS",
@@ -31,7 +33,7 @@ export class Gemini {
             },
         ];
 
-        this.genAI = new GoogleGenAI({apiKey: getKey('GEMINI_API_KEY')});
+        this.genAI = new GoogleGenAI({apiKey: getKey(this.keyName)});
     }
 
     async sendRequest(turns, systemMessage) {
@@ -52,7 +54,7 @@ export class Gemini {
             safetySettings: this.safetySettings,
             config: {
                 systemInstruction: systemMessage,
-                ...(this.params || {})
+                ...sanitizeRequestParams(this.params)
             }
         });
         const response = await result.text;
@@ -91,7 +93,7 @@ export class Gemini {
                 contents: contents,
                 safetySettings: this.safetySettings,
                 generationConfig: {
-                    ...(this.params || {})
+                    ...sanitizeRequestParams(this.params)
                 },
                 systemInstruction: systemMessage
             });
@@ -118,8 +120,8 @@ export class Gemini {
     }
 }
 
-const sendAudioRequest = async (text, model, voice, url) => {
-    const ai = new GoogleGenAI({apiKey: getKey('GEMINI_API_KEY')});
+const sendAudioRequest = async (text, model, voice, url, params = {}) => {
+    const ai = new GoogleGenAI({apiKey: getKey(resolveKeyName(params, null, 'GEMINI_API_KEY'))});
 
     const response = await ai.models.generateContent({
         model: model,

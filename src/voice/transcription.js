@@ -1,5 +1,6 @@
 import OpenAIApi, { toFile } from 'openai';
 import { getKey, hasKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from '../models/_model_utils.js';
 
 const DEFAULT_OPENAI_STT_URL = 'https://api.openai.com/v1';
 const DEFAULT_QWEN_STT_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
@@ -16,6 +17,7 @@ function inferProvider(modelConfig) {
                 model: rest.join('/'),
                 url: '',
                 params: {},
+                keyName: null,
             };
         }
         return {
@@ -23,6 +25,7 @@ function inferProvider(modelConfig) {
             model: modelConfig,
             url: '',
             params: {},
+            keyName: null,
         };
     }
 
@@ -33,12 +36,13 @@ function inferProvider(modelConfig) {
         provider,
         model: modelConfig?.model || defaultModel,
         url: modelConfig?.url || '',
-        params: modelConfig?.params || {},
+        params: sanitizeRequestParams(modelConfig?.params || {}),
+        keyName: resolveKeyName(modelConfig?.params, modelConfig?.key_name || modelConfig?.keyName),
     };
 }
 
-function getApiKey(provider) {
-    const keyName = provider === 'qwen' ? 'QWEN_API_KEY' : 'OPENAI_API_KEY';
+function getApiKey(provider, keyName = null) {
+    keyName = keyName || (provider === 'qwen' ? 'QWEN_API_KEY' : 'OPENAI_API_KEY');
     return getKey(keyName);
 }
 
@@ -177,7 +181,7 @@ export async function transcribePcm16Audio({
     }
 
     const config = {
-        apiKey: getApiKey(resolved.provider),
+        apiKey: getApiKey(resolved.provider, resolved.keyName),
         baseURL: getBaseUrl(resolved.provider, resolved.url),
     };
     if (resolved.provider === 'openai' && hasKey('OPENAI_ORG_ID')) {

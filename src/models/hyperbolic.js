@@ -1,13 +1,15 @@
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class Hyperbolic {
     static prefix = 'hyperbolic';
-    constructor(modelName, apiUrl) {
+    constructor(modelName, apiUrl, params, keyName) {
         this.modelName = modelName || "deepseek-ai/DeepSeek-V3";
         this.apiUrl = apiUrl || "https://api.hyperbolic.xyz/v1/chat/completions";
+        this.params = sanitizeRequestParams(params);
 
         // Retrieve the Hyperbolic API key from keys.js
-        this.apiKey = getKey('HYPERBOLIC_API_KEY');
+        this.apiKey = getKey(resolveKeyName(params, keyName, 'HYPERBOLIC_API_KEY'));
         if (!this.apiKey) {
             throw new Error('HYPERBOLIC_API_KEY not found. Check your keys.js file.');
         }
@@ -32,7 +34,8 @@ export class Hyperbolic {
             max_tokens: 8192,
             temperature: 0.7,
             top_p: 0.9,
-            stream: false
+            stream: false,
+            ...(this.params || {})
         };
 
         const maxAttempts = 5;

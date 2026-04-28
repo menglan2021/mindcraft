@@ -118,6 +118,63 @@ cp keys.example.json keys.json
 - TTS 使用千问
 - 玩家语音转文字默认使用 `qwen/qwen3-asr-flash`
 
+如果你想让对话、代码、视觉、Embedding、TTS 使用不同的 API Key，可以在 `keys.json` 里放多个 key 名，再在对应模型配置里写 `key_name`。
+
+示例 `keys.json`：
+
+```json
+{
+  "QWEN_CHAT_API_KEY": "sk-...",
+  "QWEN_CODE_API_KEY": "sk-...",
+  "QWEN_EMBEDDING_API_KEY": "sk-...",
+  "QWEN_TTS_API_KEY": "sk-...",
+  "QWEN_STT_API_KEY": "sk-..."
+}
+```
+
+示例 `sanbai_bot.json` 片段：
+
+```json
+"model": {
+  "api": "qwen",
+  "model": "qwen3.6-plus",
+  "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "key_name": "QWEN_CHAT_API_KEY"
+},
+"code_model": {
+  "api": "qwen",
+  "model": "qwen3.6-plus",
+  "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "key_name": "QWEN_CODE_API_KEY"
+},
+"embedding": {
+  "api": "qwen",
+  "model": "text-embedding-v4",
+  "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "key_name": "QWEN_EMBEDDING_API_KEY"
+},
+"speak_model": {
+  "api": "qwen",
+  "model": "qwen3-tts-instruct-flash-realtime",
+  "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "voice": "Cherry",
+  "key_name": "QWEN_TTS_API_KEY",
+  "params": {
+    "language_type": "Chinese"
+  }
+},
+"voice_input": {
+  "stt_model": {
+    "api": "qwen",
+    "model": "qwen3-asr-flash",
+    "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "key_name": "QWEN_STT_API_KEY"
+  }
+}
+```
+
+`key_name` 也可以写在模型的 `params` 里，但推荐放在模型对象顶层，避免和 provider 自己的参数混在一起。没写 `key_name` 时仍然使用默认 key 名，例如 `QWEN_API_KEY`、`OPENAI_API_KEY`、`GEMINI_API_KEY`。
+
 ### 4.2 检查 `settings.js`
 
 推荐确认以下字段：

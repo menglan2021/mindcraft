@@ -1,16 +1,18 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class OpenRouter {
     static prefix = 'openrouter';
-    constructor(model_name, url) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
+        this.params = sanitizeRequestParams(params);
 
         let config = {};
         config.baseURL = url || 'https://openrouter.ai/api/v1';
 
-        const apiKey = getKey('OPENROUTER_API_KEY');
+        const apiKey = getKey(resolveKeyName(params, keyName, 'OPENROUTER_API_KEY'));
         if (!apiKey) {
             console.error('Error: OPENROUTER_API_KEY not found. Make sure it is set properly.');
         }
@@ -29,7 +31,8 @@ export class OpenRouter {
         const pack = {
             model: this.model_name,
             messages,
-            stop: stop_seq
+            stop: stop_seq,
+            ...(this.params || {})
         };
 
         let res = null;

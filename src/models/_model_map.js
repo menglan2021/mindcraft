@@ -84,7 +84,7 @@ export function createModel(profile) {
     if (!apiMap[profile.api]) {
         throw new Error('Unknown api:', profile.api);
     }
-    const model = new apiMap[profile.api](profile.model, profile.url, profile.params);
+    const model = new apiMap[profile.api](profile.model, profile.url, profile.params, profile.key_name || profile.keyName);
     instrumentModelTiming(model, profile);
     return model;
 }

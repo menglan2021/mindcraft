@@ -46,7 +46,11 @@ function resolveSpeechModel(model) {
         modelName: model.model,
         voice: model.voice,
         url: model.url || providerConfig?.baseUrl,
-        params: model.params || {},
+        params: {
+            ...(model.params || {}),
+            ...(model.key_name ? { key_name: model.key_name } : {}),
+            ...(model.keyName ? { keyName: model.keyName } : {}),
+        },
         providerConfig,
     };
 }

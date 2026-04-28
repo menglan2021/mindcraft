@@ -1,19 +1,20 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class Mercury {
     static prefix = 'mercury';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
-        this.params = params;
+        this.params = sanitizeRequestParams(params);
         let config = {};
         if (url)
             config.baseURL = url;
         else
             config.baseURL = "https://api.inceptionlabs.ai/v1";
 
-        config.apiKey = getKey('MERCURY_API_KEY');
+        config.apiKey = getKey(resolveKeyName(params, keyName, 'MERCURY_API_KEY'));
 
         this.openai = new OpenAIApi(config);
     }
@@ -90,6 +91,5 @@ export class Mercury {
     }
 
 }
-
 
 

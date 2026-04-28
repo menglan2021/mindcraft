@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk'
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 // THIS API IS NOT TO BE CONFUSED WITH GROK!
 // Go to grok.js for that. :)
@@ -8,11 +9,11 @@ import { getKey } from '../utils/keys.js';
 export class GroqCloudAPI {
     static prefix = 'groq';
 
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
 
         this.model_name = model_name;
         this.url = url;
-        this.params = params || {};
+        this.params = sanitizeRequestParams(params);
 
         // Remove any mention of "tools" from params:
         if (this.params.tools)
@@ -23,7 +24,7 @@ export class GroqCloudAPI {
         if (this.url)
             console.warn("Groq Cloud has no implementation for custom URLs. Ignoring provided URL.");
 
-        this.groq = new Groq({ apiKey: getKey('GROQCLOUD_API_KEY') });
+        this.groq = new Groq({ apiKey: getKey(resolveKeyName(params, keyName, 'GROQCLOUD_API_KEY')) });
 
 
     }

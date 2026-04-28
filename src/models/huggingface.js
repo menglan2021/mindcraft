@@ -1,20 +1,21 @@
 import { toSinglePrompt } from '../utils/text.js';
 import { getKey } from '../utils/keys.js';
 import { HfInference } from "@huggingface/inference";
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class HuggingFace {
   static prefix = 'huggingface';
-  constructor(model_name, url, params) {
+  constructor(model_name, url, params, keyName) {
     // Remove 'huggingface/' prefix if present
     this.model_name = model_name.replace('huggingface/', '');
     this.url = url;
-    this.params = params;
+    this.params = sanitizeRequestParams(params);
 
     if (this.url) {
       console.warn("Hugging Face doesn't support custom urls!");
     }
 
-    this.huggingface = new HfInference(getKey('HUGGINGFACE_API_KEY'));
+    this.huggingface = new HfInference(getKey(resolveKeyName(params, keyName, 'HUGGINGFACE_API_KEY')));
   }
 
   async sendRequest(turns, systemMessage) {

@@ -1,16 +1,17 @@
 import CerebrasSDK from '@cerebras/cerebras_cloud_sdk';
 import { strictFormat } from '../utils/text.js';
 import { getKey } from '../utils/keys.js';
+import { resolveKeyName, sanitizeRequestParams } from './_model_utils.js';
 
 export class Cerebras {
     static prefix = 'cerebras';
-    constructor(model_name, url, params) {
+    constructor(model_name, url, params, keyName) {
         this.model_name = model_name;
         this.url = url;
-        this.params = params;
+        this.params = sanitizeRequestParams(params);
 
         // Initialize client with API key
-        this.client = new CerebrasSDK({ apiKey: getKey('CEREBRAS_API_KEY') });
+        this.client = new CerebrasSDK({ apiKey: getKey(resolveKeyName(params, keyName, 'CEREBRAS_API_KEY')) });
     }
 
     async sendRequest(turns, systemMessage, stop_seq = '***') {
