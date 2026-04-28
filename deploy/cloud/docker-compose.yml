@@ -69,6 +69,10 @@ services:
       context: ../..
       # 使用云部署专用 Dockerfile，运行时固定为 Node 22。
       dockerfile: deploy/cloud/mindcraft.Dockerfile
+      args:
+        # 国内云服务器可在 .env 中配置镜像源来加速 apt/npm 下载。
+        DEBIAN_MIRROR: "${DEBIAN_MIRROR:-}"
+        NPM_REGISTRY: "${NPM_REGISTRY:-}"
     # 固定容器名，便于日志和重启操作。
     container_name: mindcraft-bot
     # 异常退出后自动重启，避免 bot 因临时异常长期离线。

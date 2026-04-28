@@ -1,9 +1,15 @@
 FROM node:22-bookworm-slim
 
+ARG DEBIAN_MIRROR=""
+ARG NPM_REGISTRY=""
+
 ENV DEBIAN_FRONTEND=noninteractive \
     NPM_CONFIG_UPDATE_NOTIFIER=false
 
-RUN apt-get update && \
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+        sed -i "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \
+    fi && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
     python3 \
     python-is-python3 \
@@ -30,7 +36,10 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY patches ./patches
-RUN npm install
+RUN if [ -n "$NPM_REGISTRY" ]; then \
+        npm config set registry "$NPM_REGISTRY"; \
+    fi && \
+    npm ci --no-audit --progress=false
 
 COPY . .
 
