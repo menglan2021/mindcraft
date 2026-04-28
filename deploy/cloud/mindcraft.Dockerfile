@@ -39,7 +39,11 @@ COPY patches ./patches
 RUN if [ -n "$NPM_REGISTRY" ]; then \
         npm config set registry "$NPM_REGISTRY"; \
     fi && \
-    npm ci --no-audit --progress=false
+    if [ -f package-lock.json ]; then \
+        npm ci --no-audit --progress=false; \
+    else \
+        npm install --no-audit --progress=false; \
+    fi
 
 COPY . .
 
