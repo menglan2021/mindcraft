@@ -121,7 +121,7 @@ services:
       VOICE_INPUT_TRIGGER_COOLDOWN_MS: "${VOICE_INPUT_TRIGGER_COOLDOWN_MS:-5000}"
       # 把少量运行时配置直接覆盖到 settings.js。
       SETTINGS_JSON: >-
-        {"host":"minecraft","port":25565,"auth":"offline","auto_open_ui":false,"chat_ingame":true,"speak":true,"render_bot_view":false,"base_profile":"god_mode"}
+        {"host":"minecraft"}
     volumes:
       # 挂载全局 settings.js，保留你的主配置。
       - ../../settings.js:/app/settings.js:ro

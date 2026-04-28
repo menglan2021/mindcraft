@@ -427,6 +427,18 @@ docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml r
 docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml restart mindcraft
 ```
 
+重新应用 `.env` 环境变量：
+
+```bash
+docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml up -d --force-recreate mindcraft
+```
+
+说明：
+
+- `restart mindcraft` 只重启旧容器，适合改了挂载文件，例如 `keys.json`、`settings.js`、`sanbai_bot.json`
+- `up -d --force-recreate mindcraft` 会删除并重新创建 `mindcraft` 容器，适合改了 `deploy/cloud/.env` 里的环境变量，例如 `VOICE_STREAMING=false`、`VOICE_OUTPUT_PRIORITY=true`
+- `up -d --build mindcraft` 会重新构建镜像，适合改了 Node 源码、`package.json` 或 `deploy/cloud/mindcraft.Dockerfile`
+
 看日志：
 
 ```bash
@@ -462,6 +474,12 @@ docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml r
 ```bash
 cd /opt/mindcraft
 docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml up -d --build mindcraft
+```
+
+如果只是修改 `deploy/cloud/.env`，不要带 `--build`，用下面的命令即可：
+
+```bash
+docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml up -d --force-recreate mindcraft
 ```
 
 ### 14.3 升级 Paper 小版本
