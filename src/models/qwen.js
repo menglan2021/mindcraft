@@ -31,12 +31,13 @@ export class Qwen {
 
         let res = null;
         try {
+            const start = performance.now();
             console.log('Awaiting Qwen api response...');
             const completion = await this.openai.chat.completions.create(pack);
             if (completion.choices[0].finish_reason === 'length') {
                 throw new Error('Context length exceeded');
             }
-            console.log('Received.');
+            console.log(`Received Qwen api response in ${((performance.now() - start) / 1000).toFixed(2)}s.`);
             res = completion.choices[0].message.content;
         } catch (err) {
             if ((err.message === 'Context length exceeded' || err.code === 'context_length_exceeded') && turns.length > 1) {

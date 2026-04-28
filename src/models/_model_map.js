@@ -85,5 +85,34 @@ export function createModel(profile) {
         throw new Error('Unknown api:', profile.api);
     }
     const model = new apiMap[profile.api](profile.model, profile.url, profile.params);
+    instrumentModelTiming(model, profile);
     return model;
+}
+
+function formatDuration(ms) {
+    if (!Number.isFinite(ms)) return 'unknown';
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+}
+
+function instrumentModelTiming(model, profile) {
+    if (!model || model.__timingInstrumented) return;
+    model.__timingInstrumented = true;
+
+    const label = `${profile.api}/${profile.model || 'default'}`;
+    for (const method of ['sendRequest', 'sendVisionRequest']) {
+        if (typeof model[method] !== 'function') continue;
+        const original = model[method].bind(model);
+        model[method] = async (...args) => {
+            const start = performance.now();
+            try {
+                const result = await original(...args);
+                console.log(`[ModelTiming] ${label}.${method} completed in ${formatDuration(performance.now() - start)}`);
+                return result;
+            } catch (error) {
+                console.log(`[ModelTiming] ${label}.${method} failed after ${formatDuration(performance.now() - start)}`);
+                throw error;
+            }
+        };
+    }
 }

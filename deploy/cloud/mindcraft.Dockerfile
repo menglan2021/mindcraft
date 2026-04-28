@@ -40,9 +40,9 @@ RUN if [ -n "$NPM_REGISTRY" ]; then \
         npm config set registry "$NPM_REGISTRY"; \
     fi && \
     if [ -f package-lock.json ]; then \
-        npm ci --no-audit --progress=false; \
+        npm ci --no-audit --progress=false --omit=optional; \
     else \
-        npm install --no-audit --progress=false; \
+        npm install --no-audit --progress=false --omit=optional; \
     fi
 
 COPY . .
