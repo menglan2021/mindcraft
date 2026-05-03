@@ -261,7 +261,6 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     const debugRealtimeTts = params.debug_realtime_tts === true || params.debugRealtimeTts === true;
     const firstAudioTimeoutMs = getNumberParam(params, ['first_audio_timeout_ms', 'firstAudioTimeoutMs'], 20000);
     const sessionUpdateTimeoutMs = getNumberParam(params, ['session_update_timeout_ms', 'sessionUpdateTimeoutMs'], 10000);
-    const commitFinishDelayMs = getNumberParam(params, ['commit_finish_delay_ms', 'commitFinishDelayMs'], 300);
     const serverCommitFinishDelayMs = getNumberParam(params, ['server_commit_finish_delay_ms', 'serverCommitFinishDelayMs'], 1000);
 
     const recordEvent = (events, type) => {
@@ -428,7 +427,6 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
                 const mode = data.session?.mode || params.mode || 'commit';
                 if (mode === 'commit') {
                     sendEvent('input_text_buffer.commit');
-                    sendFinishSessionAfter(commitFinishDelayMs);
                 } else if (mode === 'server_commit') {
                     sendFinishSessionAfter(serverCommitFinishDelayMs);
                 } else {
@@ -451,6 +449,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
 
             if (data.type === 'response.done') {
                 responseDone = true;
+                finish();
                 return;
             }
 
