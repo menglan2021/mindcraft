@@ -191,6 +191,16 @@ function getOutputSampleRate(params = {}) {
     return params.sample_rate || params.sampleRate || 24000;
 }
 
+function getNumberParam(params, names, fallback) {
+    for (const name of names) {
+        if (params[name] === undefined || params[name] === null) continue;
+        if (params[name] === '') continue;
+        const value = Number(params[name]);
+        if (Number.isFinite(value)) return value;
+    }
+    return fallback;
+}
+
 function getQwenKey(params = {}) {
     return getKey(resolveKeyName(params, null, 'QWEN_API_KEY'));
 }
@@ -244,7 +254,27 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     let sessionFinished = false;
     let receivedAudio = false;
     let firstAudioTimer = null;
-    const firstAudioTimeoutMs = Number(params.first_audio_timeout_ms || params.firstAudioTimeoutMs || 20000);
+    let sessionUpdateTimer = null;
+    let finishSessionTimer = null;
+    const sentEvents = [];
+    const receivedEvents = [];
+    const debugRealtimeTts = params.debug_realtime_tts === true || params.debugRealtimeTts === true;
+    const firstAudioTimeoutMs = getNumberParam(params, ['first_audio_timeout_ms', 'firstAudioTimeoutMs'], 20000);
+    const sessionUpdateTimeoutMs = getNumberParam(params, ['session_update_timeout_ms', 'sessionUpdateTimeoutMs'], 10000);
+    const commitFinishDelayMs = getNumberParam(params, ['commit_finish_delay_ms', 'commitFinishDelayMs'], 300);
+    const serverCommitFinishDelayMs = getNumberParam(params, ['server_commit_finish_delay_ms', 'serverCommitFinishDelayMs'], 1000);
+
+    const recordEvent = (events, type) => {
+        if (!type) return;
+        events.push(type);
+        if (events.length > 16) {
+            events.shift();
+        }
+    };
+
+    const formatRealtimeState = () => {
+        return `sent=[${sentEvents.join(', ') || 'none'}], received=[${receivedEvents.join(', ') || 'none'}]`;
+    };
 
     const closeSocket = () => {
         if (socket && (socket.readyState === 0 || socket.readyState === 1)) {
@@ -259,6 +289,14 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
             clearTimeout(firstAudioTimer);
             firstAudioTimer = null;
         }
+        if (sessionUpdateTimer) {
+            clearTimeout(sessionUpdateTimer);
+            sessionUpdateTimer = null;
+        }
+        if (finishSessionTimer) {
+            clearTimeout(finishSessionTimer);
+            finishSessionTimer = null;
+        }
         if (signal && abortHandler) {
             signal.removeEventListener('abort', abortHandler);
         }
@@ -267,8 +305,15 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     const startFirstAudioTimer = () => {
         if (!Number.isFinite(firstAudioTimeoutMs) || firstAudioTimeoutMs <= 0) return;
         firstAudioTimer = setTimeout(() => {
-            fail(new Error(`Qwen realtime TTS timed out before first audio chunk after ${firstAudioTimeoutMs}ms.`));
+            fail(new Error(`Qwen realtime TTS timed out before first audio chunk after ${firstAudioTimeoutMs}ms. ${formatRealtimeState()}`));
         }, firstAudioTimeoutMs);
+    };
+
+    const startSessionUpdateTimer = () => {
+        if (!Number.isFinite(sessionUpdateTimeoutMs) || sessionUpdateTimeoutMs <= 0) return;
+        sessionUpdateTimer = setTimeout(() => {
+            fail(new Error(`Qwen realtime TTS timed out waiting for session.updated after ${sessionUpdateTimeoutMs}ms. ${formatRealtimeState()}`));
+        }, sessionUpdateTimeoutMs);
     };
 
     const fail = (error) => {
@@ -285,18 +330,36 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
         cleanup();
         closeSocket();
         if (!receivedAudio) {
-            queue.fail(new Error('Qwen realtime TTS returned no audio data.'));
+            queue.fail(new Error(`Qwen realtime TTS returned no audio data. ${formatRealtimeState()}`));
             return;
         }
         queue.finish();
     };
 
     const sendEvent = (type, payload = {}) => {
+        recordEvent(sentEvents, type);
+        if (debugRealtimeTts) {
+            console.log(`[TTS] qwen realtime send ${type}`);
+        }
         socket.send(JSON.stringify({
             event_id: `event_${randomUUID()}`,
             type,
             ...payload,
         }));
+    };
+
+    const sendFinishSessionAfter = (delayMs) => {
+        const finishSession = () => {
+            if (settled) return;
+            sendEvent('session.finish');
+        };
+
+        if (!Number.isFinite(delayMs) || delayMs <= 0) {
+            finishSession();
+            return;
+        }
+
+        finishSessionTimer = setTimeout(finishSession, delayMs);
     };
 
     const abortHandler = () => {
@@ -314,7 +377,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     });
 
     socket.addEventListener('open', () => {
-        startFirstAudioTimer();
+        startSessionUpdateTimer();
         const session = {
             voice: voice || params.voice || 'Cherry',
             mode: params.mode || 'commit',
@@ -340,18 +403,39 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
         try {
             const message = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8');
             const data = JSON.parse(message);
+            recordEvent(receivedEvents, data.type);
+            if (debugRealtimeTts && data.type !== 'response.audio.delta') {
+                console.log(`[TTS] qwen realtime receive ${data.type || 'unknown'}`);
+            }
 
-            if (data.type === 'error') {
+            if (data.type === 'error' || data.error) {
                 fail(new Error(`Qwen realtime TTS error: ${JSON.stringify(data)}`));
+                return;
+            }
+            if (data.response?.status === 'failed') {
+                fail(new Error(`Qwen realtime TTS response failed: ${JSON.stringify(data.response)}`));
                 return;
             }
 
             if (data.type === 'session.updated') {
                 if (sessionUpdated) return;
                 sessionUpdated = true;
+                if (sessionUpdateTimer) {
+                    clearTimeout(sessionUpdateTimer);
+                    sessionUpdateTimer = null;
+                }
                 sendEvent('input_text_buffer.append', { text });
-                sendEvent('input_text_buffer.commit');
-                sendEvent('session.finish');
+                const mode = data.session?.mode || params.mode || 'commit';
+                if (mode === 'commit') {
+                    sendEvent('input_text_buffer.commit');
+                    sendFinishSessionAfter(commitFinishDelayMs);
+                } else if (mode === 'server_commit') {
+                    sendFinishSessionAfter(serverCommitFinishDelayMs);
+                } else {
+                    fail(new Error(`Qwen realtime TTS unsupported session mode: ${mode}`));
+                    return;
+                }
+                startFirstAudioTimer();
                 return;
             }
 
@@ -388,7 +472,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
         if ((responseDone || sessionFinished) && receivedAudio) {
             finish();
         } else {
-            fail(new Error('Qwen realtime TTS websocket closed before audio completed.'));
+            fail(new Error(`Qwen realtime TTS websocket closed before audio completed. ${formatRealtimeState()}`));
         }
     });
 
