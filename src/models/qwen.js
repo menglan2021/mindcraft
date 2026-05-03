@@ -258,6 +258,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     let socket = null;
     let settled = false;
     let sessionUpdated = false;
+    let sessionFinishSent = false;
     let responseDone = false;
     let sessionFinished = false;
     let receivedAudio = false;
@@ -370,6 +371,12 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
         commitTimer = setTimeout(commitTextBuffer, delayMs);
     };
 
+    const finishSession = () => {
+        if (settled || sessionFinishSent) return;
+        sessionFinishSent = true;
+        sendEvent('session.finish');
+    };
+
     const abortHandler = () => {
         fail(createAbortError());
     };
@@ -444,6 +451,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
             }
 
             if (data.type === 'input_text_buffer.committed') {
+                finishSession();
                 return;
             }
 
