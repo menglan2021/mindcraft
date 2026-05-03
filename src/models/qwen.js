@@ -201,6 +201,14 @@ function getNumberParam(params, names, fallback) {
     return fallback;
 }
 
+function getRealtimeMode(params = {}) {
+    const mode = params.mode || 'server_commit';
+    if (mode === 'commit' || mode === 'server_commit') {
+        return mode;
+    }
+    return 'server_commit';
+}
+
 function getQwenKey(params = {}) {
     return getKey(resolveKeyName(params, null, 'QWEN_API_KEY'));
 }
@@ -261,7 +269,9 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     const debugRealtimeTts = params.debug_realtime_tts === true || params.debugRealtimeTts === true;
     const firstAudioTimeoutMs = getNumberParam(params, ['first_audio_timeout_ms', 'firstAudioTimeoutMs'], 20000);
     const sessionUpdateTimeoutMs = getNumberParam(params, ['session_update_timeout_ms', 'sessionUpdateTimeoutMs'], 10000);
+    const commitFinishDelayMs = getNumberParam(params, ['commit_finish_delay_ms', 'commitFinishDelayMs'], 300);
     const serverCommitFinishDelayMs = getNumberParam(params, ['server_commit_finish_delay_ms', 'serverCommitFinishDelayMs'], 1000);
+    const realtimeMode = getRealtimeMode(params);
 
     const recordEvent = (events, type) => {
         if (!type) return;
@@ -379,7 +389,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
         startSessionUpdateTimer();
         const session = {
             voice: voice || params.voice || 'Cherry',
-            mode: params.mode || 'commit',
+            mode: realtimeMode,
             language_type: params.language_type || params.languageType || inferLanguageType(text),
             response_format: params.response_format || params.responseFormat || 'pcm',
             sample_rate: getOutputSampleRate(params),
@@ -424,7 +434,7 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
                     sessionUpdateTimer = null;
                 }
                 sendEvent('input_text_buffer.append', { text });
-                const mode = data.session?.mode || params.mode || 'commit';
+                const mode = data.session?.mode || realtimeMode;
                 if (mode === 'commit') {
                     sendEvent('input_text_buffer.commit');
                 } else if (mode === 'server_commit') {
@@ -434,6 +444,13 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
                     return;
                 }
                 startFirstAudioTimer();
+                return;
+            }
+
+            if (data.type === 'input_text_buffer.committed') {
+                if ((data.session?.mode || realtimeMode) === 'commit') {
+                    sendFinishSessionAfter(commitFinishDelayMs);
+                }
                 return;
             }
 
