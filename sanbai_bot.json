@@ -39,7 +39,8 @@
             "mode": "server_commit",
             "instructions": "用自然、清晰、偏口语的语气朗读文本，语速稍快一些。",
             "optimize_instructions": true,
-            "first_audio_timeout_ms": 30000
+            "first_audio_timeout_ms": 30000,
+            "debug_realtime_tts": true
         }
     },
 
