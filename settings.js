@@ -7,9 +7,9 @@ const settings = {
     // mindserver 负责管理所有 agent，并托管 UI
     "mindserver_port": 8080,
     "mindserver_host_public": false, // 是否把 MindServer 绑定到 0.0.0.0；Docker/反代场景需要开启，本机单机运行建议保持 false
-    "auto_open_ui": true, // 启动时自动在浏览器中打开 UI
+    "auto_open_ui": false, // 启动时自动在浏览器中打开 UI
 
-    "base_profile": "assistant", // 可选：survival、assistant、creative、god_mode
+    "base_profile": "god_mode", // 可选：survival、assistant、creative、god_mode
     "profiles": [
         "./sanbai_bot.json",
         // "./profiles/gpt.json",
@@ -29,7 +29,7 @@ const settings = {
 
     "load_memory": false, // 是否加载上一次会话的记忆
     "init_message": "Respond with hello world and your name", // bot 出生后发送给所有 bot 的初始化消息
-    "only_chat_with": [], // 仅监听并回应这些用户；为空时会在公共聊天中交流
+    "only_chat_with": ["CharlieTalk"], // 仅监听并回应这些用户；为空时会在公共聊天中交流
 
     "speak": true,
     // 是否启用 bot 的文字转语音输出。关闭时只发文字，不会发任何语音。
@@ -89,10 +89,10 @@ const settings = {
     "allow_vision": false, // 是否允许视觉模型将截图作为输入进行理解
     "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"] , // 要禁用并从文档中移除的命令，例如 ["!setMode"]
     "code_timeout_mins": -1, // 代码允许执行的分钟数；-1 表示不限制
-    "relevant_docs_count": 5, // 提示词中选取多少条相关代码函数文档；-1 表示全部加入
+    "relevant_docs_count": 1, // 提示词中选取多少条相关代码函数文档；-1 表示全部加入
 
-    "max_messages": 15, // 上下文中最多保留多少条消息
-    "num_examples": 2, // 提供给模型的示例数量
+    "max_messages": 30, // 上下文中最多保留多少条消息
+    "num_examples": 0, // 提供给模型的示例数量
     "max_commands": -1, // 单次连续回复中最多可使用多少个命令；-1 表示不限制
     "show_command_syntax": "none", // 可选："full"、"shortened"、"none"
     "narrate_behavior": false, // 是否把简单自动行为发到聊天中，例如“Picking up item!”

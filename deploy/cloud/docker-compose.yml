@@ -86,7 +86,7 @@ services:
       # Docker 部署时把 MindServer 绑定到 0.0.0.0，避免容器内只监听 localhost 导致 UI 和 agent 连接异常。
       MINDSERVER_HOST_PUBLIC: "true"
       # 限制 Node.js 旧生代堆上限，避免 2C4G 机器被 bot 进程吃满内存。
-      NODE_OPTIONS: "${NODE_OPTIONS:---max-old-space-size=768}"
+      NODE_OPTIONS: "${NODE_OPTIONS:---max-old-space-size=1024}"
       # Mindcraft Web UI 监听的容器内端口。
       MINDSERVER_PORT: "8080"
       # 默认只启动一个 bot profile，避免 2C4G 机器上多 bot 抢资源。
