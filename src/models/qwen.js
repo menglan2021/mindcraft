@@ -263,14 +263,13 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
     let receivedAudio = false;
     let firstAudioTimer = null;
     let sessionUpdateTimer = null;
-    let finishSessionTimer = null;
+    let commitTimer = null;
     const sentEvents = [];
     const receivedEvents = [];
     const debugRealtimeTts = params.debug_realtime_tts === true || params.debugRealtimeTts === true;
     const firstAudioTimeoutMs = getNumberParam(params, ['first_audio_timeout_ms', 'firstAudioTimeoutMs'], 20000);
     const sessionUpdateTimeoutMs = getNumberParam(params, ['session_update_timeout_ms', 'sessionUpdateTimeoutMs'], 10000);
-    const commitFinishDelayMs = getNumberParam(params, ['commit_finish_delay_ms', 'commitFinishDelayMs'], 300);
-    const serverCommitFinishDelayMs = getNumberParam(params, ['server_commit_finish_delay_ms', 'serverCommitFinishDelayMs'], 1000);
+    const manualCommitDelayMs = getNumberParam(params, ['manual_commit_delay_ms', 'manualCommitDelayMs'], 0);
     const realtimeMode = getRealtimeMode(params);
 
     const recordEvent = (events, type) => {
@@ -302,9 +301,9 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
             clearTimeout(sessionUpdateTimer);
             sessionUpdateTimer = null;
         }
-        if (finishSessionTimer) {
-            clearTimeout(finishSessionTimer);
-            finishSessionTimer = null;
+        if (commitTimer) {
+            clearTimeout(commitTimer);
+            commitTimer = null;
         }
         if (signal && abortHandler) {
             signal.removeEventListener('abort', abortHandler);
@@ -357,18 +356,18 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
         }));
     };
 
-    const sendFinishSessionAfter = (delayMs) => {
-        const finishSession = () => {
+    const sendCommitAfter = (delayMs) => {
+        const commitTextBuffer = () => {
             if (settled) return;
-            sendEvent('session.finish');
+            sendEvent('input_text_buffer.commit');
         };
 
         if (!Number.isFinite(delayMs) || delayMs <= 0) {
-            finishSession();
+            commitTextBuffer();
             return;
         }
 
-        finishSessionTimer = setTimeout(finishSession, delayMs);
+        commitTimer = setTimeout(commitTextBuffer, delayMs);
     };
 
     const abortHandler = () => {
@@ -435,22 +434,16 @@ function streamRealtimeAudioRequest(text, model, voice, url, params = {}) {
                 }
                 sendEvent('input_text_buffer.append', { text });
                 const mode = data.session?.mode || realtimeMode;
-                if (mode === 'commit') {
-                    sendEvent('input_text_buffer.commit');
-                } else if (mode === 'server_commit') {
-                    sendFinishSessionAfter(serverCommitFinishDelayMs);
-                } else {
+                if (mode !== 'commit' && mode !== 'server_commit') {
                     fail(new Error(`Qwen realtime TTS unsupported session mode: ${mode}`));
                     return;
                 }
+                sendCommitAfter(manualCommitDelayMs);
                 startFirstAudioTimer();
                 return;
             }
 
             if (data.type === 'input_text_buffer.committed') {
-                if ((data.session?.mode || realtimeMode) === 'commit') {
-                    sendFinishSessionAfter(commitFinishDelayMs);
-                }
                 return;
             }
 
