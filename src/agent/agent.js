@@ -574,13 +574,47 @@ export class Agent {
                 return false;
             }
 
-            this.history.add(this.name, fullResponse);
-            this.history.save();
+            const command_name = containsCommand(fullResponse);
+            if (command_name) {
+                const commandResponse = truncCommandMessage(fullResponse);
+                this.history.add(this.name, commandResponse);
 
-            if (containsCommand(fullResponse)) {
-                await this.routeResponse(source, fullResponse);
+                if (!commandExists(command_name)) {
+                    this.history.add('system', `Command ${command_name} does not exist.`);
+                    console.warn('Agent hallucinated command:', command_name);
+                    this.history.save();
+                    return false;
+                }
+
+                this.self_prompter.handleUserPromptedCmd(false, isAction(command_name));
+
+                if (settings.show_command_syntax === "full") {
+                    await this.routeResponse(source, commandResponse);
+                }
+                else if (settings.show_command_syntax === "shortened") {
+                    const pre_message = commandResponse.substring(0, commandResponse.indexOf(command_name)).trim();
+                    let chat_message = `*used ${command_name.substring(1)}*`;
+                    if (pre_message.length > 0)
+                        chat_message = `${pre_message}  ${chat_message}`;
+                    await this.routeResponse(source, chat_message);
+                }
+                else {
+                    const pre_message = commandResponse.substring(0, commandResponse.indexOf(command_name)).trim();
+                    if (pre_message.length > 0)
+                        await this.routeResponse(source, pre_message);
+                }
+
+                const execute_res = await executeCommand(this, commandResponse);
+                console.log('Agent executed:', command_name, 'and got:', execute_res);
+
+                if (execute_res)
+                    this.history.add('system', execute_res);
+                this.history.save();
                 return true;
             }
+
+            this.history.add(this.name, fullResponse);
+            this.history.save();
 
             if (!commandLike && this.#shouldFlushSpeechSegment(speechBuffer, true)) {
                 speak(speechBuffer.trim(), this.prompter.profile.speak_model, {
