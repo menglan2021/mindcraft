@@ -73,9 +73,9 @@ const settings = {
     // 当前 OpenAI 转写接口会使用这个字段；qwen/qwen3-asr-flash 兼容接口下该字段会被忽略。
     "voice_input_prompt": "请直接转写玩家语音内容，不要翻译，不要添加说话人标签，不要补充解释。",
     // 判定一句话结束前，至少需要持续多久没有新的语音包进入，避免“话还没说完就触发”。
-    "voice_input_end_silence_ms": 450,
+    "voice_input_end_silence_ms": 700,
     // 小于这个时长的语音片段会被丢弃，减少咳嗽声、误触发和零碎短音。
-    "voice_input_min_duration_ms": 300,
+    "voice_input_min_duration_ms": 500,
     // 单次语音片段的最大时长，超过会强制截断并触发转写，避免无限积累。
     "voice_input_max_duration_ms": 15000,
     // 一次转写刚触发后，短时间内不再立即开启下一次，减少连续抖动触发。

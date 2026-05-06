@@ -21,6 +21,30 @@ function normalizeTranscript(text) {
         .replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
+function isFillerTranscript(text) {
+    const normalized = normalizeTranscript(text);
+    return [
+        '嗯',
+        '嗯嗯',
+        '呃',
+        '呃呃',
+        '啊',
+        '啊啊',
+        '哦',
+        '噢',
+        '唔',
+        '额',
+        '呐',
+        'um',
+        'uh',
+        'er',
+        'ah',
+        'hmm',
+        'mm',
+        'mhm',
+    ].includes(normalized);
+}
+
 export class VoiceInputBridge {
     constructor(agent, globalSettings = {}) {
         this.agent = agent;
@@ -318,6 +342,10 @@ export class VoiceInputBridge {
     }
 
     async #handleTranscript(player, transcript, data = {}) {
+        if (isFillerTranscript(transcript)) {
+            console.log(`[VoiceInput] filler transcript ignored from ${player}: ${transcript}`);
+            return;
+        }
         if (this.#isDuplicateTranscript(player, transcript)) {
             console.log(`[VoiceInput] duplicate transcript ignored from ${player}: ${transcript}`);
             return;

@@ -115,12 +115,12 @@
     "voice_input_end_silence_ms": {
         "type": "number",
         "description": "判定一句话结束前需要保持静默的毫秒数，值越大越不容易过早触发",
-        "default": 450
+        "default": 700
     },
     "voice_input_min_duration_ms": {
         "type": "number",
         "description": "小于该时长的语音片段会被丢弃，减少误触发",
-        "default": 300
+        "default": 500
     },
     "voice_input_max_duration_ms": {
         "type": "number",

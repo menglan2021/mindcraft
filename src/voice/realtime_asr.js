@@ -180,8 +180,8 @@ export class RealtimeAsrSession {
                         input_audio_transcription: inputAudioTranscription,
                         turn_detection: {
                             type: 'server_vad',
-                            threshold: this.resolved.params?.vad_threshold ?? 0.2,
-                            silence_duration_ms: this.resolved.params?.vad_silence_duration_ms ?? 350,
+                            threshold: this.resolved.params?.vad_threshold ?? 0.3,
+                            silence_duration_ms: this.resolved.params?.vad_silence_duration_ms ?? 700,
                         },
                     },
                 });

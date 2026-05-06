@@ -56,7 +56,9 @@
     "voice_input": {
         "enabled": true,
         "stt_model": "qwen/qwen3-asr-flash-realtime",
-        "language": "auto"
+        "language": "auto",
+        "end_silence_ms": 700,
+        "min_duration_ms": 500
     }
 
 }
