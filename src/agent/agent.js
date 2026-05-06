@@ -280,6 +280,10 @@ export class Agent {
         cancelSpeech('Agent 已静音，取消当前语音。');
     }
 
+    cancelSpeechForVoiceInput() {
+        cancelSpeech('玩家开始说话，取消当前语音。');
+    }
+
     async handleMessage(source, message, max_responses=null) {
         await this.checkTaskDone();
         if (!source || !message) {
@@ -449,7 +453,7 @@ export class Agent {
         }
     }
 
-    async openChat(message) {
+    async openChat(message, options = {}) {
         let to_translate = message;
         let remaining = '';
         let command_name = containsCommand(message);
@@ -463,7 +467,7 @@ export class Agent {
         message = message.replaceAll('\n', ' ');
 
         let speechPromise = null;
-        if (settings.speak) {
+        if (settings.speak && options.speak !== false) {
             speechPromise = speak(to_translate, this.prompter.profile.speak_model, {
                 profile: this.prompter.profile,
             });
@@ -481,6 +485,112 @@ export class Agent {
         sendOutputToServer(this.name, message);
         if (settings.voice_output_priority && speechPromise) {
             await speechPromise;
+        }
+    }
+
+    #shouldFlushSpeechSegment(text, isFinal = false) {
+        const trimmed = text.trim();
+        if (!trimmed) return false;
+        if (isFinal) return true;
+        if (/[.!?。！？]\s*$/.test(trimmed) && trimmed.length >= 8) return true;
+        if (/[,;:，；：]\s*$/.test(trimmed) && trimmed.length >= 36) return true;
+        return trimmed.length >= 90;
+    }
+
+    #extractVisibleResponse(text) {
+        const response = String(text || '');
+        const thinkEnd = response.lastIndexOf('</think>');
+        if (thinkEnd !== -1) {
+            return response.slice(thinkEnd + '</think>'.length);
+        }
+        if (response.includes('<think')) {
+            return '';
+        }
+        return response;
+    }
+
+    async handleVoiceMessageFast(source, message) {
+        await this.checkTaskDone();
+        if (!source || !message) return false;
+
+        const previousDeferMemorySummaries = this.deferMemorySummaries;
+        this.deferMemorySummaries = true;
+
+        try {
+            message = await handleEnglishTranslation(message);
+            console.log('received realtime voice message from', source, ':', message);
+
+            await this.history.add(source, message);
+            this.history.save();
+
+            const history = this.history.getHistory();
+            let fullResponse = '';
+            let speechBuffer = '';
+            let emittedSpeechChars = 0;
+            let commandLike = false;
+
+            for await (const delta of this.prompter.promptConvoStream(history)) {
+                fullResponse += delta;
+                const visibleResponse = this.#extractVisibleResponse(fullResponse);
+                if (emittedSpeechChars > visibleResponse.length) {
+                    emittedSpeechChars = visibleResponse.length;
+                    speechBuffer = '';
+                }
+                if (!commandLike && containsCommand(visibleResponse)) {
+                    commandLike = true;
+                    speechBuffer = '';
+                    cancelSpeech('检测到命令回复，取消分段语音。');
+                }
+                if (commandLike) {
+                    continue;
+                }
+
+                const speechDelta = visibleResponse.slice(emittedSpeechChars);
+                emittedSpeechChars = visibleResponse.length;
+                if (!speechDelta) {
+                    continue;
+                }
+                speechBuffer += speechDelta;
+                if (this.#shouldFlushSpeechSegment(speechBuffer)) {
+                    const segment = speechBuffer.trim();
+                    speechBuffer = '';
+                    speak(segment, this.prompter.profile.speak_model, {
+                        profile: this.prompter.profile,
+                    });
+                }
+            }
+
+            fullResponse = this.#extractVisibleResponse(fullResponse);
+            fullResponse = fullResponse.trim();
+            console.log(`${this.name} realtime full response to ${source}: ""${fullResponse}""`);
+
+            if (!fullResponse) {
+                return false;
+            }
+
+            this.history.add(this.name, fullResponse);
+            this.history.save();
+
+            if (containsCommand(fullResponse)) {
+                await this.routeResponse(source, fullResponse);
+                return true;
+            }
+
+            if (!commandLike && this.#shouldFlushSpeechSegment(speechBuffer, true)) {
+                speak(speechBuffer.trim(), this.prompter.profile.speak_model, {
+                    profile: this.prompter.profile,
+                });
+            }
+
+            await this.openChat(fullResponse, { speak: false });
+            return false;
+        } finally {
+            this.deferMemorySummaries = previousDeferMemorySummaries;
+            if (!previousDeferMemorySummaries && this.history.hasPendingSummaries()) {
+                this.history.flushPendingSummaries()
+                    .then(() => this.history.save())
+                    .catch((error) => console.error('Failed to flush realtime voice memory summaries:', error));
+            }
         }
     }
 

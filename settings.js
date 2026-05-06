@@ -60,26 +60,26 @@ const settings = {
     // 是否把 STT 转写结果再同步显示到游戏聊天栏。
     // 这里会作为系统消息显示，目的是让玩家看到转写内容，但不要再次触发 bot。
     "voice_input_echo_to_chat": false,
-    // 语音转写模型。默认使用千问兼容接口的 qwen3-asr-flash。
-    // 也可以写成 openai/gpt-4o-transcribe、qwen/其他模型，或在 profile.voice_input.stt_model 中单独覆盖。
+    // 语音转写模型。默认使用千问实时接口的 qwen3-asr-flash-realtime。
+    // 也可以写成 qwen/qwen3-asr-flash、openai/gpt-4o-transcribe，或在 profile.voice_input.stt_model 中单独覆盖。
     // 使用 qwen/* 时需要提前配置环境变量 QWEN_API_KEY。
-    "voice_input_stt_model": "qwen/qwen3-asr-flash",
+    "voice_input_stt_model": "qwen/qwen3-asr-flash-realtime",
     // 语音转写接口地址。留空时使用对应 provider 的默认地址。
     // 如果你使用 OpenAI-compatible 网关，可以在这里填写自定义 base URL。
     "voice_input_stt_url": "",
-    // 语音转写的目标语言。默认按中文转写，不做翻译。
-    "voice_input_language": "zh",
+    // 语音转写的目标语言。默认按英文转写，不做翻译。
+    "voice_input_language": "en",
     // 给 STT 的附加提示，帮助模型更稳定地按原文转写。
     // 当前 OpenAI 转写接口会使用这个字段；qwen/qwen3-asr-flash 兼容接口下该字段会被忽略。
     "voice_input_prompt": "请直接转写玩家语音内容，不要翻译，不要添加说话人标签，不要补充解释。",
     // 判定一句话结束前，至少需要持续多久没有新的语音包进入，避免“话还没说完就触发”。
-    "voice_input_end_silence_ms": 900,
+    "voice_input_end_silence_ms": 450,
     // 小于这个时长的语音片段会被丢弃，减少咳嗽声、误触发和零碎短音。
-    "voice_input_min_duration_ms": 700,
+    "voice_input_min_duration_ms": 300,
     // 单次语音片段的最大时长，超过会强制截断并触发转写，避免无限积累。
     "voice_input_max_duration_ms": 15000,
     // 一次转写刚触发后，短时间内不再立即开启下一次，减少连续抖动触发。
-    "voice_input_trigger_cooldown_ms": 500,
+    "voice_input_trigger_cooldown_ms": 150,
 
     "chat_ingame": true, // 是否把 bot 的回复显示在 Minecraft 聊天中
     "language": "en", // 自动翻译所使用的目标语言；支持的语言名称见 https://cloud.google.com/translate/docs/languages

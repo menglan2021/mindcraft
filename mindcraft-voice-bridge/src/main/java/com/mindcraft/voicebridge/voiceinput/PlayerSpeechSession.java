@@ -27,6 +27,7 @@ public class PlayerSpeechSession {
     private final ByteArrayOutputStream pcmBuffer;
     private final long createdAtMs;
     private volatile long lastPacketAtMs;
+    private int nextChunkSeq = 1;
 
     public PlayerSpeechSession(
             String playerName,
@@ -60,14 +61,15 @@ public class PlayerSpeechSession {
         this.lastPacketAtMs = createdAtMs;
     }
 
-    public void appendPacket(byte[] opusPacket, long nowMs) {
+    public byte[] appendPacket(byte[] opusPacket, long nowMs) {
         short[] pcmSamples = decoder.decode(opusPacket);
         if (pcmSamples == null || pcmSamples.length == 0) {
-            return;
+            return new byte[0];
         }
         byte[] pcmBytes = audioConverter.shortsToBytes(pcmSamples);
         pcmBuffer.writeBytes(pcmBytes);
         lastPacketAtMs = nowMs;
+        return pcmBytes;
     }
 
     public boolean shouldFinalizeForSilence(long nowMs) {
@@ -92,6 +94,10 @@ public class PlayerSpeechSession {
 
     public byte[] getPcm16leBytes() {
         return pcmBuffer.toByteArray();
+    }
+
+    public int nextChunkSeq() {
+        return nextChunkSeq++;
     }
 
     public void close() {

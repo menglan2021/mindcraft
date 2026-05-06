@@ -6,12 +6,12 @@ export const DEFAULT_BRIDGE_PORT = 8787;
 export const DEFAULT_BRIDGE_SAMPLE_RATE = 48000;
 export const DEFAULT_BRIDGE_CHANNELS = 1;
 export const DEFAULT_FRAME_DURATION_MS = 20;
-export const DEFAULT_VOICE_INPUT_STT_MODEL = 'qwen/qwen3-asr-flash';
-export const DEFAULT_VOICE_INPUT_LANGUAGE = 'zh';
-export const DEFAULT_VOICE_INPUT_END_SILENCE_MS = 900;
-export const DEFAULT_VOICE_INPUT_MIN_DURATION_MS = 700;
+export const DEFAULT_VOICE_INPUT_STT_MODEL = 'qwen/qwen3-asr-flash-realtime';
+export const DEFAULT_VOICE_INPUT_LANGUAGE = 'en';
+export const DEFAULT_VOICE_INPUT_END_SILENCE_MS = 450;
+export const DEFAULT_VOICE_INPUT_MIN_DURATION_MS = 300;
 export const DEFAULT_VOICE_INPUT_MAX_DURATION_MS = 15000;
-export const DEFAULT_VOICE_INPUT_TRIGGER_COOLDOWN_MS = 500;
+export const DEFAULT_VOICE_INPUT_TRIGGER_COOLDOWN_MS = 150;
 
 function toPositiveInteger(value, fallback) {
     const parsed = Number.parseInt(value, 10);

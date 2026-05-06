@@ -52,6 +52,34 @@ export class Qwen {
         return res;
     }
 
+    async *sendRequestStream(turns, systemMessage, stop_seq = '***') {
+        let messages = [{ role: 'system', content: systemMessage }].concat(turns);
+        messages = strictFormat(messages);
+
+        const pack = {
+            model: this.model_name || 'qwen-plus',
+            messages,
+            stop: stop_seq,
+            stream: true,
+            ...sanitizeRequestParams(this.params),
+        };
+
+        const start = performance.now();
+        console.log('Awaiting Qwen streaming api response...');
+        const stream = await this.openai.chat.completions.create(pack);
+        let loggedFirstToken = false;
+        for await (const chunk of stream) {
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (!delta) continue;
+            if (!loggedFirstToken) {
+                loggedFirstToken = true;
+                console.log(`[ModelTiming] qwen/${this.model_name || 'default'}.firstToken in ${((performance.now() - start) / 1000).toFixed(2)}s`);
+            }
+            yield delta;
+        }
+        console.log(`Received Qwen streaming api response in ${((performance.now() - start) / 1000).toFixed(2)}s.`);
+    }
+
     async embed(text) {
         const maxRetries = 5;
         for (let retries = 0; retries < maxRetries; retries += 1) {
@@ -314,6 +342,7 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
     const finishAfterCommitDelayMs = getNumberParam(params, ['finish_after_commit_delay_ms', 'finishAfterCommitDelayMs'], 100);
     const realtimeMode = getRealtimeMode(params);
     const ttsText = params.normalize_text === false || params.normalizeText === false ? text : normalizeTtsText(text);
+    const requestStart = performance.now();
 
     const recordEvent = (events, type) => {
         if (!type) return;
@@ -516,6 +545,7 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
                 if (!receivedAudio && firstAudioTimer) {
                     clearTimeout(firstAudioTimer);
                     firstAudioTimer = null;
+                    console.log(`[TTSTiming] qwen first_audio=${((performance.now() - requestStart) / 1000).toFixed(2)}s`);
                 }
                 receivedAudio = true;
                 queue.push(Buffer.from(data.delta, 'base64'));
@@ -525,6 +555,7 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
             if (data.type === 'response.done') {
                 responseDone = true;
                 sendFinishSession();
+                console.log(`[TTSTiming] qwen done=${((performance.now() - requestStart) / 1000).toFixed(2)}s`);
                 finish();
                 return;
             }

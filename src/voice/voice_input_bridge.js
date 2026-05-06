@@ -7,6 +7,7 @@ import {
     normalizeVoiceInputConfig,
 } from './bridge_protocol.js';
 import { transcribePcm16Audio } from './transcription.js';
+import { isRealtimeAsrModel, RealtimeAsrSession } from './realtime_asr.js';
 
 const OPEN = 1;
 const CONNECTING = 0;
@@ -33,6 +34,9 @@ export class VoiceInputBridge {
         this.running = false;
         this.inputQueue = new StreamQueue('voice-input');
         this.recentTranscripts = new Map();
+        this.realtimeSessions = new Map();
+        this.realtimeFallbackAudio = new Map();
+        this.completedRealtimeUtterances = new Map();
     }
 
     async start() {
@@ -51,6 +55,12 @@ export class VoiceInputBridge {
     close() {
         this.running = false;
         this.inputQueue.cancelAll('voice input bridge closed');
+        for (const session of this.realtimeSessions.values()) {
+            session.close();
+        }
+        this.realtimeSessions.clear();
+        this.realtimeFallbackAudio.clear();
+        this.completedRealtimeUtterances.clear();
         this.#clearReconnectTimer();
         if (this.socket && (this.socket.readyState === OPEN || this.socket.readyState === CONNECTING)) {
             try {
@@ -162,7 +172,26 @@ export class VoiceInputBridge {
                 return;
             }
             if (data.type === 'input_audio') {
+                if (this.#isCompletedRealtimeUtterance(data.utteranceId)) {
+                    return;
+                }
+                if (this.realtimeSessions.has(data.utteranceId)) {
+                    this.realtimeFallbackAudio.set(data.utteranceId, data);
+                    return;
+                }
                 this.#queueInputAudio(data);
+                return;
+            }
+            if (data.type === 'input_audio_start') {
+                this.#startRealtimeInputAudio(data);
+                return;
+            }
+            if (data.type === 'input_audio_chunk') {
+                this.#appendRealtimeInputAudio(data);
+                return;
+            }
+            if (data.type === 'input_audio_end') {
+                this.#finishRealtimeInputAudio(data);
                 return;
             }
             console.log('[VoiceInput] bridge message', raw);
@@ -171,35 +200,146 @@ export class VoiceInputBridge {
         }
     }
 
+    #startRealtimeInputAudio(data) {
+        if (!isRealtimeAsrModel(this.#resolveSttModelConfig())) {
+            return;
+        }
+        if (!data.utteranceId || this.realtimeSessions.has(data.utteranceId)) {
+            return;
+        }
+        this.agent.cancelSpeechForVoiceInput?.();
+
+        const session = new RealtimeAsrSession({
+            utteranceId: data.utteranceId,
+            player: data.player,
+            targetBot: data.targetBot || this.config.botEntityName,
+            sampleRate: Number(data.sampleRate) || 48000,
+            channels: Number(data.channels) || 1,
+            modelConfig: this.#resolveSttModelConfig(),
+            sttUrl: this.config.sttUrl,
+            language: this.config.language,
+            onTranscript: ({ player, transcript }) => {
+                this.realtimeSessions.delete(data.utteranceId);
+                this.realtimeFallbackAudio.delete(data.utteranceId);
+                this.#markCompletedRealtimeUtterance(data.utteranceId);
+                this.#handleTranscript(player, transcript, data).catch((error) => {
+                    console.error('[VoiceInput] failed to handle realtime transcript', error);
+                });
+            },
+            onError: (error) => {
+                this.#failRealtimeSession(data.utteranceId, error, '[VoiceInput] realtime ASR failed');
+            },
+        });
+        this.realtimeSessions.set(data.utteranceId, session);
+        session.start().catch((error) => {
+            if (this.realtimeSessions.get(data.utteranceId) === session) {
+                this.#failRealtimeSession(data.utteranceId, error, '[VoiceInput] realtime ASR start failed');
+            }
+        });
+    }
+
+    #appendRealtimeInputAudio(data) {
+        const session = this.realtimeSessions.get(data.utteranceId);
+        if (!session) return;
+        const pcm16leBase64 = data?.pcm16le_base64;
+        if (!pcm16leBase64) return;
+        session.appendPcmChunk(Buffer.from(pcm16leBase64, 'base64')).catch((error) => {
+            this.#failRealtimeSession(data.utteranceId, error, '[VoiceInput] realtime ASR append failed');
+        });
+    }
+
+    #finishRealtimeInputAudio(data) {
+        const session = this.realtimeSessions.get(data.utteranceId);
+        if (!session) return;
+        session.finish({ dropOnly: data.dropOnly === true }).finally(() => {
+            if (data.dropOnly === true) {
+                this.realtimeSessions.delete(data.utteranceId);
+                this.realtimeFallbackAudio.delete(data.utteranceId);
+            }
+        }).catch((error) => {
+            this.#failRealtimeSession(data.utteranceId, error, '[VoiceInput] realtime ASR finish failed');
+        });
+    }
+
+    #failRealtimeSession(utteranceId, error, message) {
+        const session = this.realtimeSessions.get(utteranceId);
+        if (session) {
+            session.close();
+        }
+        this.realtimeSessions.delete(utteranceId);
+        console.error(message, error);
+        this.#queueRealtimeFallbackAudio(utteranceId, error);
+    }
+
+    #queueRealtimeFallbackAudio(utteranceId, error) {
+        const fallbackAudio = this.realtimeFallbackAudio.get(utteranceId);
+        if (!fallbackAudio) {
+            return;
+        }
+        this.realtimeFallbackAudio.delete(utteranceId);
+        console.warn(`[VoiceInput] fallback to batch STT utteranceId=${utteranceId}: ${error?.message || error || 'unknown realtime ASR failure'}`);
+        this.#queueInputAudio(fallbackAudio);
+    }
+
+    #markCompletedRealtimeUtterance(utteranceId) {
+        if (!utteranceId) return;
+        const now = Date.now();
+        this.completedRealtimeUtterances.set(utteranceId, now);
+        for (const [id, timestamp] of this.completedRealtimeUtterances.entries()) {
+            if ((now - timestamp) > 30000) {
+                this.completedRealtimeUtterances.delete(id);
+            }
+        }
+    }
+
+    #isCompletedRealtimeUtterance(utteranceId) {
+        if (!utteranceId) return false;
+        const completedAt = this.completedRealtimeUtterances.get(utteranceId);
+        if (!completedAt) return false;
+        if ((Date.now() - completedAt) > 30000) {
+            this.completedRealtimeUtterances.delete(utteranceId);
+            return false;
+        }
+        return true;
+    }
+
     #queueInputAudio(data) {
         this.inputQueue.enqueue(async ({ signal }) => {
             const transcript = await this.#transcribeIncomingAudio(data, signal);
             if (!transcript) {
                 return;
             }
-            if (this.#isDuplicateTranscript(data.player, transcript)) {
-                console.log(`[VoiceInput] duplicate transcript ignored from ${data.player}: ${transcript}`);
-                return;
-            }
-            if (this.config.echoToChat) {
-                try {
-                    await this.send(createEchoChatMessage({
-                        utteranceId: data.utteranceId,
-                        speaker: data.player,
-                        targetBot: data.targetBot || this.config.botEntityName,
-                        text: transcript,
-                    }));
-                } catch (error) {
-                    console.error('[VoiceInput] failed to echo transcript to chat', error);
-                }
-            }
-            console.log(`[VoiceInput] transcript ${data.player} -> ${transcript}`);
-            await this.agent.respondFunc?.(data.player, transcript);
+            await this.#handleTranscript(data.player, transcript, data);
         }).catch((error) => {
             if (!isAbortError(error)) {
                 console.error('[VoiceInput] failed to handle input audio', error);
             }
         });
+    }
+
+    async #handleTranscript(player, transcript, data = {}) {
+        if (this.#isDuplicateTranscript(player, transcript)) {
+            console.log(`[VoiceInput] duplicate transcript ignored from ${player}: ${transcript}`);
+            return;
+        }
+        if (this.config.echoToChat) {
+            try {
+                await this.send(createEchoChatMessage({
+                    utteranceId: data.utteranceId,
+                    speaker: player,
+                    targetBot: data.targetBot || this.config.botEntityName,
+                    text: transcript,
+                }));
+            } catch (error) {
+                console.error('[VoiceInput] failed to echo transcript to chat', error);
+            }
+        }
+        console.log(`[VoiceInput] transcript ${player} -> ${transcript}`);
+        if (typeof this.agent.handleVoiceMessageFast === 'function') {
+            await this.agent.handleVoiceMessageFast(player, transcript);
+            return;
+        }
+        await this.agent.respondFunc?.(player, transcript);
     }
 
     async #transcribeIncomingAudio(data, signal) {

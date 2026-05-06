@@ -7,6 +7,7 @@ const DEFAULT_QWEN_STT_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 const DEFAULT_OPENAI_STT_MODEL = 'gpt-4o-mini-transcribe';
 const DEFAULT_QWEN_STT_MODEL = 'qwen3-asr-flash';
 const QWEN_WAVE_FILLER_SIZE = 4044;
+const sttClients = new Map();
 
 function inferProvider(modelConfig) {
     if (typeof modelConfig === 'string') {
@@ -54,6 +55,30 @@ function getBaseUrl(provider, overrideUrl = '') {
         return DEFAULT_QWEN_STT_URL;
     }
     return DEFAULT_OPENAI_STT_URL;
+}
+
+function getClientCacheKey(config) {
+    return JSON.stringify({
+        baseURL: config.baseURL,
+        organization: config.organization || '',
+        apiKey: config.apiKey ? `${config.apiKey.slice(0, 8)}:${config.apiKey.length}` : '',
+    });
+}
+
+function getSttClient(config) {
+    const cacheKey = getClientCacheKey(config);
+    if (!sttClients.has(cacheKey)) {
+        sttClients.set(cacheKey, new OpenAIApi(config));
+    }
+    return sttClients.get(cacheKey);
+}
+
+function normalizeLanguage(language) {
+    const normalized = String(language || '').trim().toLowerCase();
+    if (!normalized || normalized === 'auto' || normalized === 'detect') {
+        return '';
+    }
+    return normalized;
 }
 
 function createWaveBuffer(pcm16leBuffer, sampleRate, channels = 1, bitsPerSample = 16, fillerChunkSize = 0) {
@@ -136,7 +161,7 @@ async function transcribeWithQwen({
         ...(params?.extra_body || {}),
         asr_options: {
             enable_itn: false,
-            ...(language ? { language } : {}),
+            ...(normalizeLanguage(language) ? { language: normalizeLanguage(language) } : {}),
             ...(params?.extra_body?.asr_options || {}),
         },
     };
@@ -171,10 +196,12 @@ export async function transcribePcm16Audio({
     sampleRate,
     channels = 1,
     modelConfig = 'qwen/qwen3-asr-flash',
-    language = 'zh',
+    language = 'en',
     prompt = '',
     signal,
 }) {
+    const start = performance.now();
+    const sttLanguage = normalizeLanguage(language);
     const resolved = inferProvider(modelConfig);
     if (!['openai', 'qwen'].includes(resolved.provider)) {
         throw new Error(`当前语音转写仅支持 openai 或 qwen，收到 provider=${resolved.provider}`);
@@ -188,18 +215,21 @@ export async function transcribePcm16Audio({
         config.organization = getKey('OPENAI_ORG_ID');
     }
 
-    const client = new OpenAIApi(config);
+    const client = getSttClient(config);
+    let transcript = '';
     if (resolved.provider === 'qwen') {
-        return transcribeWithQwen({
+        transcript = await transcribeWithQwen({
             client,
             pcm16leBuffer,
             sampleRate,
             channels,
             model: resolved.model,
-            language,
+            language: sttLanguage,
             params: resolved.params || {},
             signal,
         });
+        console.log(`[VoiceInputTiming] stt provider=qwen model=${resolved.model} audioMs=${Math.round((pcm16leBuffer.length / Math.max(1, sampleRate * channels * 2)) * 1000)} elapsed=${((performance.now() - start) / 1000).toFixed(2)}s`);
+        return transcript;
     }
 
     const wavBuffer = createPcm16WaveBuffer(pcm16leBuffer, sampleRate, channels);
@@ -208,14 +238,17 @@ export async function transcribePcm16Audio({
     const payload = {
         file,
         model: resolved.model,
-        language,
+        ...(sttLanguage ? { language: sttLanguage } : {}),
         ...(prompt ? { prompt } : {}),
         ...(resolved.params || {}),
     };
 
     const response = await client.audio.transcriptions.create(payload, signal ? { signal } : undefined);
     if (typeof response === 'string') {
-        return response.trim();
+        transcript = response.trim();
+    } else {
+        transcript = String(response?.text || '').trim();
     }
-    return String(response?.text || '').trim();
+    console.log(`[VoiceInputTiming] stt provider=openai model=${resolved.model} audioMs=${Math.round((pcm16leBuffer.length / Math.max(1, sampleRate * channels * 2)) * 1000)} elapsed=${((performance.now() - start) / 1000).toFixed(2)}s`);
+    return transcript;
 }

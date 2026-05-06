@@ -140,4 +140,60 @@ public class BridgeWebSocketServer extends WebSocketServer {
                 pcm16le
         ));
     }
+
+    public void sendInputAudioStart(
+            WebSocket connection,
+            String utteranceId,
+            String player,
+            String targetBot,
+            int sampleRate,
+            int channels,
+            boolean whispering
+    ) {
+        if (connection == null || !connection.isOpen()) {
+            return;
+        }
+        connection.send(messageCodec.encodeInputAudioStart(
+                utteranceId,
+                player,
+                targetBot,
+                sampleRate,
+                channels,
+                whispering
+        ));
+    }
+
+    public void sendInputAudioChunk(
+            WebSocket connection,
+            String utteranceId,
+            int seq,
+            long durationMs,
+            byte[] pcm16le
+    ) {
+        if (connection == null || !connection.isOpen()) {
+            return;
+        }
+        connection.send(messageCodec.encodeInputAudioChunk(
+                utteranceId,
+                seq,
+                durationMs,
+                pcm16le
+        ));
+    }
+
+    public void sendInputAudioEnd(
+            WebSocket connection,
+            String utteranceId,
+            long durationMs,
+            boolean dropOnly
+    ) {
+        if (connection == null || !connection.isOpen()) {
+            return;
+        }
+        connection.send(messageCodec.encodeInputAudioEnd(
+                utteranceId,
+                durationMs,
+                dropOnly
+        ));
+    }
 }

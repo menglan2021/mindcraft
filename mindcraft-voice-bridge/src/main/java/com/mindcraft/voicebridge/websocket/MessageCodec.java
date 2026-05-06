@@ -80,4 +80,51 @@ public class MessageCodec {
         payload.addProperty("pcm16le_base64", Base64.getEncoder().encodeToString(pcm16le));
         return gson.toJson(payload);
     }
+
+    public String encodeInputAudioStart(
+            String utteranceId,
+            String player,
+            String targetBot,
+            int sampleRate,
+            int channels,
+            boolean whispering
+    ) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("type", "input_audio_start");
+        payload.addProperty("utteranceId", utteranceId);
+        payload.addProperty("player", player);
+        payload.addProperty("targetBot", targetBot);
+        payload.addProperty("sampleRate", sampleRate);
+        payload.addProperty("channels", channels);
+        payload.addProperty("whispering", whispering);
+        return gson.toJson(payload);
+    }
+
+    public String encodeInputAudioChunk(
+            String utteranceId,
+            int seq,
+            long durationMs,
+            byte[] pcm16le
+    ) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("type", "input_audio_chunk");
+        payload.addProperty("utteranceId", utteranceId);
+        payload.addProperty("seq", seq);
+        payload.addProperty("durationMs", durationMs);
+        payload.addProperty("pcm16le_base64", Base64.getEncoder().encodeToString(pcm16le));
+        return gson.toJson(payload);
+    }
+
+    public String encodeInputAudioEnd(
+            String utteranceId,
+            long durationMs,
+            boolean dropOnly
+    ) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("type", "input_audio_end");
+        payload.addProperty("utteranceId", utteranceId);
+        payload.addProperty("durationMs", durationMs);
+        payload.addProperty("dropOnly", dropOnly);
+        return gson.toJson(payload);
+    }
 }

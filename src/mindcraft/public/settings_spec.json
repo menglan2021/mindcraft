@@ -94,8 +94,8 @@
     },
     "voice_input_stt_model": {
         "type": "string",
-        "description": "语音转写模型，例如 qwen/qwen3-asr-flash、openai/gpt-4o-mini-transcribe",
-        "default": "qwen/qwen3-asr-flash"
+        "description": "语音转写模型，例如 qwen/qwen3-asr-flash-realtime、qwen/qwen3-asr-flash、openai/gpt-4o-mini-transcribe",
+        "default": "qwen/qwen3-asr-flash-realtime"
     },
     "voice_input_stt_url": {
         "type": "string",
@@ -104,8 +104,8 @@
     },
     "voice_input_language": {
         "type": "string",
-        "description": "语音转写语言，例如 zh、en",
-        "default": "zh"
+        "description": "语音转写语言，例如 en、zh；需要中英文混合输入时可设置为 auto",
+        "default": "en"
     },
     "voice_input_prompt": {
         "type": "string",
@@ -115,12 +115,12 @@
     "voice_input_end_silence_ms": {
         "type": "number",
         "description": "判定一句话结束前需要保持静默的毫秒数，值越大越不容易过早触发",
-        "default": 900
+        "default": 450
     },
     "voice_input_min_duration_ms": {
         "type": "number",
         "description": "小于该时长的语音片段会被丢弃，减少误触发",
-        "default": 700
+        "default": 300
     },
     "voice_input_max_duration_ms": {
         "type": "number",
@@ -130,7 +130,7 @@
     "voice_input_trigger_cooldown_ms": {
         "type": "number",
         "description": "一次转写完成后重新允许触发的冷却时间，减少连续抖动触发",
-        "default": 500
+        "default": 150
     },
     "language": {
         "type": "string",

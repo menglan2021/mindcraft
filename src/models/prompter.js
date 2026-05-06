@@ -226,7 +226,9 @@ export class Prompter {
             }
 
             let prompt = this.profile.conversing;
+            const promptStart = performance.now();
             prompt = await this.replaceStrings(prompt, messages, this.convo_examples);
+            console.log(`[PromptTiming] conversation_prompt=${((performance.now() - promptStart) / 1000).toFixed(2)}s chars=${prompt.length}`);
             let generation;
 
             try {
@@ -263,6 +265,50 @@ export class Prompter {
         }
 
         return '';
+    }
+
+    async *promptConvoStream(messages) {
+        this.most_recent_msg_time = Date.now();
+        const current_msg_time = this.most_recent_msg_time;
+
+        await this.checkCooldown();
+        if (current_msg_time !== this.most_recent_msg_time) {
+            return '';
+        }
+
+        let prompt = this.profile.conversing;
+        const promptStart = performance.now();
+        prompt = await this.replaceStrings(prompt, messages, this.convo_examples);
+        console.log(`[PromptTiming] conversation_prompt=${((performance.now() - promptStart) / 1000).toFixed(2)}s chars=${prompt.length}`);
+
+        let generation = '';
+        try {
+            if (typeof this.chat_model.sendRequestStream === 'function') {
+                for await (const delta of this.chat_model.sendRequestStream(messages, prompt)) {
+                    if (current_msg_time !== this.most_recent_msg_time) {
+                        return generation;
+                    }
+                    generation += delta;
+                    yield delta;
+                }
+            } else {
+                generation = await this.chat_model.sendRequest(messages, prompt);
+                yield generation;
+            }
+
+            console.log("Generated response:", generation);
+            await this._saveLog(prompt, messages, generation, 'conversation');
+        } catch (error) {
+            console.error('Error during streaming message generation:', error);
+            try {
+                generation = await this.chat_model.sendRequest(messages, prompt);
+                yield generation;
+            } catch (fallbackError) {
+                console.error('Error during fallback message generation:', fallbackError);
+                yield 'My brain disconnected, try again.';
+            }
+        }
+        return generation;
     }
 
     async promptCoding(messages) {

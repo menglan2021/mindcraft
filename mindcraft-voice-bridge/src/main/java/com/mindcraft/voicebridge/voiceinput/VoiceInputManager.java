@@ -121,10 +121,28 @@ public class VoiceInputManager {
                     serverApi.getAudioConverter()
             );
             activeSessions.put(player.getUniqueId(), session);
+            bridgeServer.sendInputAudioStart(
+                    session.getTargetConnection(),
+                    session.getUtteranceId(),
+                    session.getPlayerName(),
+                    session.getTargetBot(),
+                    session.getSampleRate(),
+                    session.getChannels(),
+                    session.isWhispering()
+            );
         }
 
         try {
-            session.appendPacket(opusPacket, now);
+            byte[] pcmChunk = session.appendPacket(opusPacket, now);
+            if (pcmChunk.length > 0) {
+                bridgeServer.sendInputAudioChunk(
+                        session.getTargetConnection(),
+                        session.getUtteranceId(),
+                        session.nextChunkSeq(),
+                        session.getDurationMs(),
+                        pcmChunk
+                );
+            }
             if (session.shouldFinalizeForMaxDuration()) {
                 flushSession(player.getUniqueId(), session, false);
             }
@@ -202,16 +220,43 @@ public class VoiceInputManager {
             lastTriggeredAt.put(speakerUuid, System.currentTimeMillis());
 
             if (dropOnly) {
+                BridgeWebSocketServer bridgeServer = bridgeWebSocketServer;
+                if (bridgeServer != null) {
+                    bridgeServer.sendInputAudioEnd(
+                            session.getTargetConnection(),
+                            session.getUtteranceId(),
+                            session.getDurationMs(),
+                            true
+                    );
+                }
                 return;
             }
 
             byte[] pcmBytes = session.getPcm16leBytes();
             if (pcmBytes.length == 0) {
+                BridgeWebSocketServer bridgeServer = bridgeWebSocketServer;
+                if (bridgeServer != null) {
+                    bridgeServer.sendInputAudioEnd(
+                            session.getTargetConnection(),
+                            session.getUtteranceId(),
+                            session.getDurationMs(),
+                            true
+                    );
+                }
                 return;
             }
 
             if (!session.isLongEnough()) {
                 logger.info("[MindcraftVoiceBridge] dropped short voice input from " + session.getPlayerName() + " duration=" + session.getDurationMs() + "ms");
+                BridgeWebSocketServer bridgeServer = bridgeWebSocketServer;
+                if (bridgeServer != null) {
+                    bridgeServer.sendInputAudioEnd(
+                            session.getTargetConnection(),
+                            session.getUtteranceId(),
+                            session.getDurationMs(),
+                            true
+                    );
+                }
                 return;
             }
 
@@ -234,6 +279,12 @@ public class VoiceInputManager {
                     session.isWhispering(),
                     session.getDurationMs(),
                     pcmBytes
+            );
+            bridgeServer.sendInputAudioEnd(
+                    session.getTargetConnection(),
+                    session.getUtteranceId(),
+                    session.getDurationMs(),
+                    false
             );
             logger.info("[MindcraftVoiceBridge] forwarded voice input " + session.getUtteranceId() + " player=" + session.getPlayerName() + " -> bot=" + session.getTargetBot() + " duration=" + session.getDurationMs() + "ms");
         } catch (Exception exception) {
