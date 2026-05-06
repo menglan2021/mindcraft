@@ -374,7 +374,7 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
     const firstAudioTimeoutMs = getNumberParam(params, ['first_audio_timeout_ms', 'firstAudioTimeoutMs'], 20000);
     const sessionUpdateTimeoutMs = getNumberParam(params, ['session_update_timeout_ms', 'sessionUpdateTimeoutMs'], 10000);
     const manualCommitDelayMs = getNumberParam(params, ['manual_commit_delay_ms', 'manualCommitDelayMs'], 0);
-    const finishAfterCommitDelayMs = getNumberParam(params, ['finish_after_commit_delay_ms', 'finishAfterCommitDelayMs'], 100);
+    const finishAfterCommitDelayMs = getNumberParam(params, ['finish_after_commit_delay_ms', 'finishAfterCommitDelayMs'], 300);
     const realtimeMode = getRealtimeMode(params);
     const ttsText = params.normalize_text === false || params.normalizeText === false ? text : normalizeTtsText(text);
     const requestStart = performance.now();
@@ -495,6 +495,12 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
         finishSessionTimer = setTimeout(sendFinishSession, delayMs);
     };
 
+    const clearFinishSessionTimer = () => {
+        if (!finishSessionTimer) return;
+        clearTimeout(finishSessionTimer);
+        finishSessionTimer = null;
+    };
+
     const abortHandler = () => {
         fail(createAbortError());
     };
@@ -573,6 +579,11 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
 
             if (data.type === 'input_text_buffer.committed') {
                 sendFinishSessionAfter(finishAfterCommitDelayMs);
+                return;
+            }
+
+            if (data.type === 'response.created') {
+                clearFinishSessionTimer();
                 return;
             }
 
