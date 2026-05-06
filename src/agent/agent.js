@@ -509,6 +509,11 @@ export class Agent {
         return response;
     }
 
+    #isNoResponsePlaceholder(text) {
+        const trimmed = String(text || '').trim();
+        return trimmed === '' || trimmed === '\\t' || trimmed.toLowerCase() === '<tab>';
+    }
+
     async handleVoiceMessageFast(source, message) {
         await this.checkTaskDone();
         if (!source || !message) return false;
@@ -564,7 +569,8 @@ export class Agent {
             fullResponse = fullResponse.trim();
             console.log(`${this.name} realtime full response to ${source}: ""${fullResponse}""`);
 
-            if (!fullResponse) {
+            if (this.#isNoResponsePlaceholder(fullResponse)) {
+                console.log(`${this.name} realtime response to ${source} was empty/no-op, skipping TTS.`);
                 return false;
             }
 

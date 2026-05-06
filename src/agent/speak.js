@@ -319,6 +319,7 @@ async function sendBridgeFrames(iterable, sourceSampleRate, bridgeConfig, bridge
 
     let seq = 1;
     let loggedChunk = false;
+    let firstFrameSentAt = null;
 
     const flushFrames = async (frames) => {
         for (const frame of frames) {
@@ -328,6 +329,9 @@ async function sendBridgeFrames(iterable, sourceSampleRate, bridgeConfig, bridge
                 seq,
                 pcm16le: frame,
             });
+            if (firstFrameSentAt === null) {
+                firstFrameSentAt = Date.now();
+            }
             if (!loggedChunk) {
                 console.log(`[TTS] bridge chunk utteranceId=${utteranceId} seq=${seq} bytes=${frame.length}`);
                 loggedChunk = true;
@@ -344,6 +348,50 @@ async function sendBridgeFrames(iterable, sourceSampleRate, bridgeConfig, bridge
 
     await flushFrames(frameChunker.push(resampler.flush()));
     await flushFrames(frameChunker.flush());
+
+    const frameCount = seq - 1;
+    return {
+        frameCount,
+        audioDurationMs: frameCount * bridgeConfig.frameDurationMs,
+        firstFrameSentAt,
+    };
+}
+
+async function waitForBridgePlaybackDrain(stats, utteranceId, signal) {
+    if (!stats?.frameCount || !stats.firstFrameSentAt) {
+        return;
+    }
+    const elapsedSinceFirstFrameMs = Date.now() - stats.firstFrameSentAt;
+    const safetyMs = 120;
+    const remainingMs = stats.audioDurationMs - elapsedSinceFirstFrameMs + safetyMs;
+    if (remainingMs <= 0) {
+        return;
+    }
+    console.log(`[TTS] bridge drain utteranceId=${utteranceId} frames=${stats.frameCount} audio=${stats.audioDurationMs}ms wait=${Math.round(remainingMs)}ms`);
+    await new Promise((resolve, reject) => {
+        let abortHandler = null;
+        const cleanup = () => {
+            if (signal && abortHandler) {
+                signal.removeEventListener('abort', abortHandler);
+            }
+        };
+        const timer = setTimeout(() => {
+            cleanup();
+            resolve();
+        }, remainingMs);
+        abortHandler = () => {
+            clearTimeout(timer);
+            cleanup();
+            reject(signal.reason instanceof Error ? signal.reason : createAbortError('语音桥接播放等待已取消。'));
+        };
+        if (signal) {
+            if (signal.aborted) {
+                abortHandler();
+                return;
+            }
+            signal.addEventListener('abort', abortHandler, { once: true });
+        }
+    });
 }
 
 async function playMinecraftVoiceChat(text, model, options, signal) {
@@ -378,6 +426,7 @@ async function playMinecraftVoiceChat(text, model, options, signal) {
     const linkedAbort = createLinkedAbortController(signal);
 
     try {
+        let playbackStats = null;
         if (bridgeConfig.streaming && typeof resolved.providerConfig.streamAudioRequest === 'function') {
             const sourceSampleRate = inferRemoteSampleRate(resolved.provider, resolved.params);
             if (!sourceSampleRate) {
@@ -390,7 +439,7 @@ async function playMinecraftVoiceChat(text, model, options, signal) {
                 resolved.url,
                 { ...resolved.params, signal: linkedAbort.controller.signal },
             );
-            await sendBridgeFrames(audioStream, sourceSampleRate, bridgeConfig, bridgeClient, utteranceId, signal);
+            playbackStats = await sendBridgeFrames(audioStream, sourceSampleRate, bridgeConfig, bridgeClient, utteranceId, signal);
         } else {
             const audioData = await fetchRemoteAudio(text, model, signal);
             const audioBuffer = Buffer.from(audioData, 'base64');
@@ -398,11 +447,12 @@ async function playMinecraftVoiceChat(text, model, options, signal) {
             if (!wave) {
                 throw new Error('桥接模式要求 PCM WAV 音频，但当前提供者返回的格式无法直接解析。');
             }
-            await sendBridgeFrames([wave.pcmData], wave.sampleRate, bridgeConfig, bridgeClient, utteranceId, signal);
+            playbackStats = await sendBridgeFrames([wave.pcmData], wave.sampleRate, bridgeConfig, bridgeClient, utteranceId, signal);
         }
 
         await bridgeClient.endUtterance(utteranceId);
         console.log(`[TTS] bridge end utteranceId=${utteranceId}`);
+        await waitForBridgePlaybackDrain(playbackStats, utteranceId, signal);
     } catch (error) {
         if (!linkedAbort.controller.signal.aborted) {
             linkedAbort.controller.abort(error instanceof Error ? error : createAbortError('语音桥接失败。'));

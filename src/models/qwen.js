@@ -191,8 +191,8 @@ function getTtsBaseUrl(url) {
     }
 }
 
-function inferLanguageType(text) {
-    return /[\u3400-\u9fff]/.test(text) ? 'Chinese' : 'English';
+function resolveLanguageType(params = {}) {
+    return params.language_type || params.languageType || 'Auto';
 }
 
 function getRealtimeTtsBaseUrl(url) {
@@ -241,11 +241,46 @@ function getQwenKey(params = {}) {
     return getKey(resolveKeyName(params, null, 'QWEN_API_KEY'));
 }
 
+function getStandardTtsFallbackModel(model) {
+    const resolved = String(model || '').replace(/-realtime$/, '');
+    return resolved || 'qwen3-tts-flash';
+}
+
+function getStandardTtsFallbackParams(params = {}) {
+    const fallbackParams = { ...params };
+    for (const key of [
+        'mode',
+        'instructions',
+        'optimize_instructions',
+        'optimizeInstructions',
+        'debug_realtime_tts',
+        'debugRealtimeTts',
+        'first_audio_timeout_ms',
+        'firstAudioTimeoutMs',
+        'session_update_timeout_ms',
+        'sessionUpdateTimeoutMs',
+        'manual_commit_delay_ms',
+        'manualCommitDelayMs',
+        'finish_after_commit_delay_ms',
+        'finishAfterCommitDelayMs',
+        'realtime_attempts',
+        'realtimeAttempts',
+        'realtime_retry_delay_ms',
+        'realtimeRetryDelayMs',
+        'realtime_fallback_to_standard',
+        'realtimeFallbackToStandard',
+    ]) {
+        delete fallbackParams[key];
+    }
+    return fallbackParams;
+}
+
 function normalizeTtsText(text) {
     return String(text || '')
         .replace(/[“”]/g, '"')
         .replace(/[‘’]/g, "'")
         .replace(/"/g, '')
+        .replace(/[*_`~#>]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 }
@@ -479,7 +514,7 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
         const session = {
             voice: voice || params.voice || 'Cherry',
             mode: realtimeMode,
-            language_type: params.language_type || params.languageType || inferLanguageType(text),
+            language_type: resolveLanguageType(params),
             response_format: params.response_format || params.responseFormat || 'pcm',
             sample_rate: getOutputSampleRate(params),
         };
@@ -589,6 +624,7 @@ async function* streamRealtimeAudioRequest(text, model, voice, url, params = {})
     const signal = params.signal;
     const attempts = Math.max(1, Math.floor(getNumberParam(params, ['realtime_attempts', 'realtimeAttempts'], 2)));
     const retryDelayMs = getNumberParam(params, ['realtime_retry_delay_ms', 'realtimeRetryDelayMs'], 500);
+    const fallbackToStandard = params.realtime_fallback_to_standard !== false && params.realtimeFallbackToStandard !== false;
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
         throwIfAborted(signal);
@@ -601,8 +637,17 @@ async function* streamRealtimeAudioRequest(text, model, voice, url, params = {})
             }
             return;
         } catch (error) {
-            if (isAbortLikeError(error) || yieldedAudio || attempt >= attempts) {
+            if (isAbortLikeError(error) || yieldedAudio) {
                 throw error;
+            }
+            if (attempt >= attempts) {
+                if (!fallbackToStandard) {
+                    throw error;
+                }
+                const fallbackModel = getStandardTtsFallbackModel(model);
+                console.warn(`[TTS] qwen realtime failed before audio after ${attempts} attempts: ${error.message || error}. falling back to ${fallbackModel}...`);
+                yield* streamStandardAudioRequest(text, fallbackModel, voice, url, getStandardTtsFallbackParams(params));
+                return;
             }
             console.warn(`[TTS] qwen realtime attempt ${attempt} failed before audio: ${error.message || error}. retrying...`);
             if (retryDelayMs > 0) {
@@ -623,7 +668,7 @@ async function* streamStandardAudioRequest(text, model, voice, url, params = {})
         input: {
             text,
             voice: voice || params.voice || 'Cherry',
-            language_type: params.language_type || params.languageType || inferLanguageType(text),
+            language_type: resolveLanguageType(params),
         },
     };
 
