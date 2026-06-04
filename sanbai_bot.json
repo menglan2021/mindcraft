@@ -38,10 +38,10 @@
         "params": {
             "mode": "commit",
             "sample_rate": 24000,
-            "first_audio_timeout_ms": 12000,
+            "first_audio_timeout_ms": 3000,
             "realtime_attempts": 2,
             "realtime_retry_delay_ms": 50,
-            "realtime_fallback_to_standard": true,
+            "realtime_fallback_to_standard": false,
             "finish_after_commit_delay_ms": 300,
             "debug_realtime_tts": true
         }
