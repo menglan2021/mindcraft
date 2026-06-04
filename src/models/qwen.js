@@ -197,15 +197,19 @@ function resolveLanguageType(params = {}) {
 
 function getRealtimeTtsBaseUrl(url) {
     const baseUrl = url || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    const toWebSocketUrl = (value) => value
+        .replace(/^https:\/\//, 'wss://')
+        .replace(/^http:\/\//, 'ws://');
+
     if (baseUrl.includes('/compatible-mode/v1')) {
-        return baseUrl.replace(/\/compatible-mode\/v1\/?$/, '/api-ws/v1/realtime');
+        return toWebSocketUrl(baseUrl.replace(/\/compatible-mode\/v1\/?$/, '/api-ws/v1/realtime'));
     }
     if (baseUrl.includes('/api/v1')) {
-        return baseUrl.replace(/\/api\/v1\/?$/, '/api-ws/v1/realtime');
+        return toWebSocketUrl(baseUrl.replace(/\/api\/v1\/?$/, '/api-ws/v1/realtime'));
     }
     try {
         const parsed = new URL(baseUrl);
-        return `${parsed.origin}/api-ws/v1/realtime`;
+        return toWebSocketUrl(`${parsed.origin}/api-ws/v1/realtime`);
     } catch {
         return 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
     }
@@ -368,6 +372,7 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
     let sessionUpdateTimer = null;
     let commitTimer = null;
     let finishSessionTimer = null;
+    let websocketErrorDetail = null;
     const sentEvents = [];
     const receivedEvents = [];
     const debugRealtimeTts = params.debug_realtime_tts === true || params.debugRealtimeTts === true;
@@ -572,7 +577,11 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
                     fail(new Error(`Qwen realtime TTS unsupported session mode: ${mode}`));
                     return;
                 }
-                sendCommitAfter(manualCommitDelayMs);
+                if (mode === 'commit') {
+                    sendCommitAfter(manualCommitDelayMs);
+                } else {
+                    sendFinishSessionAfter(finishAfterCommitDelayMs);
+                }
                 startFirstAudioTimer();
                 return;
             }
@@ -616,15 +625,17 @@ function streamRealtimeAudioRequestOnce(text, model, voice, url, params = {}) {
     });
 
     socket.addEventListener('error', (event) => {
-        fail(new Error(`Qwen realtime TTS websocket error: ${event.message || 'unknown error'}`));
+        websocketErrorDetail = event.error?.message || event.message || event.reason || 'unknown error';
     });
 
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event) => {
         if (settled) return;
         if ((responseDone || sessionFinished) && receivedAudio) {
             finish();
         } else {
-            fail(new Error(`Qwen realtime TTS websocket closed before audio completed. ${formatRealtimeState()}`));
+            const reason = event.reason ? ` reason=${event.reason}` : '';
+            const errorDetail = websocketErrorDetail ? ` websocketError=${websocketErrorDetail}.` : '';
+            fail(new Error(`Qwen realtime TTS websocket closed before audio completed. code=${event.code || 'unknown'}${reason}.${errorDetail} ${formatRealtimeState()}`));
         }
     });
 
