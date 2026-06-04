@@ -37,10 +37,11 @@
         "voice": "Cherry",
         "params": {
             "mode": "commit",
-            "first_audio_timeout_ms": 3000,
+            "sample_rate": 24000,
+            "first_audio_timeout_ms": 12000,
             "realtime_attempts": 2,
             "realtime_retry_delay_ms": 50,
-            "realtime_fallback_to_standard": false,
+            "realtime_fallback_to_standard": true,
             "finish_after_commit_delay_ms": 300,
             "debug_realtime_tts": true
         }
